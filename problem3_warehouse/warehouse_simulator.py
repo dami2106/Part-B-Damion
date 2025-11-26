@@ -41,7 +41,6 @@ class Robot:
     target: Optional[Position] = None
     path: List[Position] = None
     carrying_item: bool = False
-    battery_level: float = 100.0
     state: str = "idle"  # idle, moving, picking, delivering, charging
     order_id: Optional[int] = None  # easier to track robot current order (so we can mark complete later)
     
@@ -437,8 +436,10 @@ class WarehouseSimulator:
         }
 
 
+
 def main():
     """Example usage"""
+    np.random.seed(42)  # ensure reproducible runs
     print("Warehouse Robot Fleet Coordination - Starter Code")
     print("=" * 50)
     
@@ -457,7 +458,7 @@ def main():
     
     # Run simulation
     print("\nRunning simulation...")
-    for step in range(1000):
+    for step in range(100):
         sim.step(dt=1.0)
         
         if step % 20 == 0:
@@ -466,14 +467,12 @@ def main():
 
     
     #test the a* 
-    # print("\nTesting A* pathfinding:")
     # start = Position(0, 0)
     # goal = Position(5, 5)
     # path = PathPlanner.a_star(warehouse, start, goal)
     # print(f"Path from {start} to {goal}:")
     # for pos in path:
     #     print(f"({pos.x}, {pos.y})", end=" -> ")
-    # print("Goal")
     
     print("\nNext steps:")
     print("1. Implement A* pathfinding")
