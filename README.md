@@ -11,39 +11,6 @@ python traffic_simulator.py
 ```
 
 **What's provided:**
-- `traffic_simulator.py` - Core simulation framework
-- Basic data structures (Vehicle, Intersection)
-- Synthetic data generator
-- Placeholder for ML and optimization
-
-**What you need to implement:**
-- ML model for traffic prediction
-- Optimization algorithm for light timing
-- Visualization (matplotlib, plotly, or custom)
-- Benchmarking against fixed-timing baseline
-
----
-
-### Problem 2: Fantasy Sports Optimizer ⚽
-```bash
-cd starter_code/problem2_fantasy
-python fantasy_optimizer.py
-```
-
-**What's provided:**
-- `fantasy_optimizer.py` - Team selection framework
-- Data loader (synthetic + API integration stubs)
-- Player and constraint data structures
-- Baseline strategies to beat
-
-**What you need to implement:**
-- ML model for player performance prediction
-- Optimization solver (integer programming)
-- Interactive dashboard/tool
-- Validation against baselines
-
----
-
 ### Problem 3: Warehouse Robot Coordination 🤖
 ```bash
 cd starter_code/problem3_warehouse

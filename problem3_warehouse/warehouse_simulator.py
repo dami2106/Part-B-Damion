@@ -9,6 +9,7 @@ Feel free to modify, extend, or completely rewrite!
 import numpy as np
 from dataclasses import dataclass
 from typing import List, Tuple, Set, Dict, Optional
+import heapq
 from enum import Enum
 
 
@@ -42,6 +43,7 @@ class Robot:
     carrying_item: bool = False
     battery_level: float = 100.0
     state: str = "idle"  # idle, moving, picking, delivering, charging
+    order_id: Optional[int] = None  # easier to track robot current order (so we can mark complete later)
     
 
 @dataclass
@@ -65,6 +67,7 @@ class Warehouse:
         self.orders: List[Order] = []
         self.completed_orders: List[Order] = []
         self.time = 0.0
+        self.total_collisions = 0  #Added this to see how many times we wait for block to be open 
         
         # Initialize warehouse layout
         self._create_layout()
@@ -108,6 +111,8 @@ class Warehouse:
             return False
         if self.grid[pos.y, pos.x] == CellType.OBSTACLE.value:
             return False
+        # if self.grid[pos.y, pos.x] == CellType.SHELF.value:
+        #     return False
         return True
     
     def get_neighbors(self, pos: Position) -> List[Position]:
@@ -124,20 +129,56 @@ class PathPlanner:
     """Pathfinding algorithms for robots"""
     
     @staticmethod
-    def a_star(warehouse: Warehouse, 
-               start: Position, 
-               goal: Position,
-               reserved_positions: Set[Position] = None) -> List[Position]:
-        """
-        A* pathfinding algorithm
+    def a_star(warehouse: Warehouse,  #map of warehouse 2d arr 
+               start: Position,  #start pos of calling robot 
+               goal: Position,   #goal pos of calling robot 
+               reserved_positions: Set[Position] = None #can populate this list with reserved grid pos to avoid collisions
+               ) -> List[Position]:
         
-        TODO: Implement A* with:
-        - Heuristic: Manhattan distance
-        - Avoid collisions with reserved positions
-        - Return path or None if no path exists
-        """
-        # Placeholder
-        return [start, goal]
+        if reserved_positions is None:
+            reserved_positions = set()
+
+        frontier = []
+        count = 0 # to break ties in priority queue python limitation (incremement for each push)
+
+        heapq.heappush(frontier, (0, count, start)) #(f score, count, position)
+        came_from = {start: None} #map node to parent for getting path at end 
+        cost_so_far = {start: 0} #g score for each node (cost from start to node)
+
+        curr_node = None 
+
+        while frontier:
+            curr_node = heapq.heappop(frontier)[2]
+            if curr_node == goal:
+                break 
+
+            for next_node in warehouse.get_neighbors(curr_node):
+                if next_node in reserved_positions and next_node != goal:
+                    continue
+
+                new_cost = cost_so_far[curr_node] + 1
+
+                if next_node not in cost_so_far or new_cost < cost_so_far[next_node]:
+                    cost_so_far[next_node] = new_cost
+
+                    priority = new_cost + PathPlanner.manhattan(next_node, goal)
+                    
+                    count += 1
+                    heapq.heappush(frontier, (priority, count, next_node))
+                    came_from[next_node] = curr_node
+
+        if curr_node != goal:
+            return []  # No path found havent reached goal empty path 
+        
+        path = []
+        while curr_node is not None:
+            path.append(curr_node)
+            curr_node = came_from[curr_node]
+        
+        path.reverse() #planned from agent to goal, need to reverse to get agent next move 
+        return path
+
+
     
     @staticmethod
     def conflict_based_search(warehouse: Warehouse,
@@ -156,6 +197,11 @@ class PathPlanner:
         for robot, goal in zip(robots, goals):
             paths[robot.id] = PathPlanner.a_star(warehouse, robot.position, goal)
         return paths
+    
+    @staticmethod
+    def manhattan(pos1: Position, pos2: Position) -> int:
+        """Calculate Manhattan distance between two positions"""
+        return abs(pos1.x - pos2.x) + abs(pos1.y - pos2.y)
 
 
 class TaskAssigner:
@@ -168,7 +214,6 @@ class TaskAssigner:
         
         Returns: dict of robot_id -> order_id
         """
-        # TODO: Implement greedy assignment
         assignment = {}
         
         available_robots = [r for r in warehouse.robots if r.state == "idle"]
@@ -243,30 +288,46 @@ class WarehouseSimulator:
         self.path_planner = PathPlanner()
         self.task_assigner = TaskAssigner()
         self.order_predictor = OrderPredictor()
-        
+        self.dock_locations = self.find_cell_type(CellType.LOADING_DOCK)
+        self.charging_stations = self.find_cell_type(CellType.CHARGING_STATION)
+        self.shelf_locations = self.find_cell_type(CellType.SHELF)
+    
+    def find_cell_type(self, cell_type: CellType) -> List[Position]:
+        positions = []
+        for y in range(self.warehouse.height):
+            for x in range(self.warehouse.width):
+                if self.warehouse.grid[y, x] == cell_type.value:
+                    positions.append(Position(x, y))
+        return positions
+
+
     def step(self, dt: float = 1.0):
-        """Advance simulation by dt seconds"""
-        # TODO: Implement simulation step
-        # 1. Generate new orders (based on predictions or random)
-        # 2. Assign orders to robots
-        # 3. Plan paths for robots
-        # 4. Move robots along paths
-        # 5. Check for order completion
-        # 6. Update battery levels
-        # 7. Detect collisions/deadlocks
-        
         self.warehouse.time += dt
         
         # Generate orders
         if np.random.random() < 0.1:  # 10% chance per step
             self._generate_random_order()
         
-        # Assign tasks
-        assignments = self.task_assigner.greedy_assignment(self.warehouse)
+        assignments = self.task_assigner.greedy_assignment(self.warehouse) # assign based on first match 
         
+        for robot in self.warehouse.robots:
+            if robot.state == "idle" and robot.id in assignments:
+                order_id = assignments[robot.id] 
+                order = next(o for o in self.warehouse.orders if o.id == order_id)
+
+
+                robot.target = order.item_location
+                robot.path = PathPlanner.a_star(self.warehouse, robot.position, robot.target)
+                robot.current_order_id = order.id #so we know when dropped off etc 
+                
+                if len(robot.path) > 1:
+                    robot.state = "moving"
+        
+        robot_positions = {r.position for r in self.warehouse.robots}
+
         # Move robots
         for robot in self.warehouse.robots:
-            self._move_robot(robot, dt)
+            self._move_robot(robot, robot_positions, dt)
         
     def _generate_random_order(self):
         """Generate a random order"""
@@ -279,15 +340,81 @@ class WarehouseSimulator:
                 priority=np.random.choice([1, 2, 3], p=[0.7, 0.2, 0.1])
             )
             self.warehouse.add_order(order)
-    
-    def _move_robot(self, robot: Robot, dt: float):
-        """Move robot one step along its path"""
-        # TODO: Implement robot movement
-        # - Follow path
-        # - Update battery
-        # - Pick/deliver items
-        # - Handle charging
-        pass
+
+    def _move_robot(self, robot: Robot, robot_positions: Set[Position], dt: float):
+        """Move robot one step along its path"""# State: Moving to Target
+        if robot.state == "moving":
+            if robot.path and robot.position == robot.path[0]:
+                robot.path.pop(0) #Easiest condition just follow path
+
+            if not robot.path:
+                if robot.target is not None and robot.position == robot.target: # found target move state 
+                    if not robot.carrying_item:
+                        robot.state = "picking"
+                    else:
+                        robot.state = "delivering"
+                return
+
+            next_pos = robot.path[0]
+
+            #naive way to prevent collision just wait until the robot on our path has left 
+            if next_pos in robot_positions and next_pos != robot.position: 
+                self.warehouse.total_collisions += 1
+                return 
+
+            robot_positions.remove(robot.position) 
+            robot.position = next_pos
+            robot_positions.add(robot.position) #update the robot cells list 
+            
+            #again check target 
+            if robot.position == robot.target:
+                if not robot.carrying_item:
+                    robot.state = "picking"
+                else:
+                    robot.state = "delivering"
+
+        #get new item from shelf 
+        elif robot.state == "picking":
+            robot.carrying_item = True
+            
+            
+            if self.dock_locations:
+                robot.target = self.dock_locations[0]
+        
+            robot.path = PathPlanner.a_star(self.warehouse, robot.position, robot.target)
+            if robot.path:
+                robot.state = "moving"
+     
+        elif robot.state == "delivering": #robot on the dock cell 
+            
+            if robot.current_order_id is not None:
+                
+                order_idx = -1
+                for i, o in enumerate(self.warehouse.orders):
+                    if o.id == robot.current_order_id:
+                        order_idx = i
+                        break
+                
+                if order_idx != -1:
+                    order = self.warehouse.orders.pop(order_idx)
+                    order.completion_time = self.warehouse.time
+                    self.warehouse.completed_orders.append(order)
+
+            #Order is completed, reset robot state
+            robot.carrying_item = False
+            robot.target = None
+            robot.path = []
+            robot.current_order_id = None
+            robot.state = "idle"
+            
+        
+        elif robot.state == "idle":
+             #robot idle, but has a target maybe didnt find poath so re plan 
+             if robot.target and not robot.path:
+                 robot.path = PathPlanner.a_star(self.warehouse, robot.position, robot.target)
+                 if robot.path:
+                     robot.state = "moving"
+
     
     def get_metrics(self) -> Dict:
         """Calculate performance metrics"""
@@ -305,7 +432,8 @@ class WarehouseSimulator:
         return {
             'avg_completion_time': np.mean(completion_times) if completion_times else 0,
             'throughput': len(completed),
-            'orders_pending': len(self.warehouse.orders)
+            'orders_pending': len(self.warehouse.orders),
+            'collisions': self.warehouse.total_collisions
         }
 
 
@@ -329,12 +457,23 @@ def main():
     
     # Run simulation
     print("\nRunning simulation...")
-    for step in range(100):
+    for step in range(1000):
         sim.step(dt=1.0)
         
         if step % 20 == 0:
             metrics = sim.get_metrics()
             print(f"Step {step}: {metrics}")
+
+    
+    #test the a* 
+    # print("\nTesting A* pathfinding:")
+    # start = Position(0, 0)
+    # goal = Position(5, 5)
+    # path = PathPlanner.a_star(warehouse, start, goal)
+    # print(f"Path from {start} to {goal}:")
+    # for pos in path:
+    #     print(f"({pos.x}, {pos.y})", end=" -> ")
+    # print("Goal")
     
     print("\nNext steps:")
     print("1. Implement A* pathfinding")
