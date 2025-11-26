@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Set, Dict, Optional
 import heapq
 from enum import Enum
-
+from synthetic_data import SyntheticDataGenerator   
 
 class CellType(Enum):
     EMPTY = 0
@@ -290,6 +290,37 @@ class WarehouseSimulator:
         self.dock_locations = self.find_cell_type(CellType.LOADING_DOCK)
         self.charging_stations = self.find_cell_type(CellType.CHARGING_STATION)
         self.shelf_locations = self.find_cell_type(CellType.SHELF)
+
+        self.order_schedule = self._generate_daily_schedule()
+        self.next_order_index = 0
+
+    #Daily schedule generated using the given synthetic data generator
+    def _generate_daily_schedule(self):
+        gen = SyntheticDataGenerator()
+        
+        #One day for now with peaks at 9, and 5 
+        df = gen.generate_poisson_events(
+            n_days=1, 
+            base_rate=20,  #base orders per hour         
+            peak_hours=[9, 17],
+            peak_multiplier=3.0    #how much busier are we at peak 
+        )
+        
+        arrival_times = []
+    
+        STEPS_PER_HOUR = 60 # granularity of simulation steps per hour (how many env steps per hour in the dataset)
+        
+        for hour, row in df.iterrows():
+            count = int(row['event_count']) # order count for this hour
+            if count > 0:
+                start_time = hour * STEPS_PER_HOUR
+                end_time = (hour + 1) * STEPS_PER_HOUR
+                
+                # Generate random times within this hour
+                times = np.random.uniform(start_time, end_time, count)
+                arrival_times.extend(times)
+                
+        return sorted(arrival_times) #sort them so we process morn to night 
     
     def find_cell_type(self, cell_type: CellType) -> List[Position]:
         positions = []
@@ -304,8 +335,14 @@ class WarehouseSimulator:
         self.warehouse.time += dt
         
         # Generate orders
-        if np.random.random() < 0.1:  # 10% chance per step
+        # if np.random.random() < 0.1:  # 10% chance per step
+        #     self._generate_random_order()
+ 
+        while (self.next_order_index < len(self.order_schedule) and  #still have orders to process
+               self.order_schedule[self.next_order_index] <= self.warehouse.time): #dont schedule orders in future
+            
             self._generate_random_order()
+            self.next_order_index += 1
         
         assignments = self.task_assigner.greedy_assignment(self.warehouse) # assign based on first match 
         
@@ -458,7 +495,8 @@ def main():
     
     # Run simulation
     print("\nRunning simulation...")
-    for step in range(100):
+    # 24 hours * 60 steps/hour = 1440 steps
+    for step in range(1440):
         sim.step(dt=1.0)
         
         if step % 20 == 0:
