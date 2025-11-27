@@ -15,6 +15,9 @@ from synthetic_data import SyntheticDataGenerator
 
 from scipy.optimize import linear_sum_assignment
 
+CHARGE_RATE = 2.0
+DRAIN_RATE = 0.5
+
 class CellType(Enum):
     EMPTY = 0
     SHELF = 1
@@ -45,6 +48,8 @@ class Robot:
     carrying_item: bool = False
     state: str = "idle"  # idle, moving, picking, delivering, charging
     order_id: Optional[int] = None  # easier to track robot current order (so we can mark complete later)
+    battery: float = 100.0
+    battery_thresh: float = 20.0
     
 
 @dataclass

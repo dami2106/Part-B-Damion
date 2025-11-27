@@ -15,6 +15,9 @@ from synthetic_data import SyntheticDataGenerator
 
 from scipy.optimize import linear_sum_assignment
 
+CHARGE_RATE = 2.0
+DRAIN_RATE = 0.5
+
 class CellType(Enum):
     EMPTY = 0
     SHELF = 1
@@ -45,6 +48,8 @@ class Robot:
     carrying_item: bool = False
     state: str = "idle"  # idle, moving, picking, delivering, charging
     order_id: Optional[int] = None  # easier to track robot current order (so we can mark complete later)
+    battery: float = 100.0  # battery level percentage
+    battery_thresh = 20.00 #when to top up 
     
 
 @dataclass
@@ -216,8 +221,8 @@ class TaskAssigner:
         Returns: dict of robot_id -> order_id
         """
         assignment = {}
-        
-        available_robots = [r for r in warehouse.robots if r.state == "idle"]
+
+        available_robots = [r for r in warehouse.robots if r.state == "idle" and r.battery > r.battery_thresh]
         pending_orders = [o for o in warehouse.orders if o.completion_time is None]
         
         #sort orders by priority (higher first)
@@ -253,7 +258,7 @@ class TaskAssigner:
         Returns: dict of robot_id -> order_id
         """
 
-        idle_robots = [r for r in warehouse.robots if r.state == "idle"]
+        idle_robots = [r for r in warehouse.robots if r.state == "idle" and r.battery > r.battery_thresh]
         n_robots = len(idle_robots)
         orders = [o for o in warehouse.orders if o.completion_time is None] #incomplete orders have no completion 
         n_orders = len(orders)
@@ -380,8 +385,32 @@ class WarehouseSimulator:
         # if np.random.random() < 0.1:  # 10% chance per step
         #     self._generate_random_order()
         
-        # assignments = self.task_assigner.greedy_assignment(self.warehouse) # assign based on first match 
-        assignments = self.task_assigner.optimal_assignment(self.warehouse) # optimal assignment
+        #Battery code here 
+        robots_need_charge = []
+        charging_stations = self.charging_stations
+
+        for robot in self.warehouse.robots:
+            if robot.state == "charging":
+                robot.battery = min(100.0, robot.battery + CHARGE_RATE * dt)
+                if robot.battery >= 100.0:
+                    robot.state = "idle" #done charging 
+                continue 
+                
+            if robot.state == "idle" and robot.battery <= robot.battery_thresh:
+                robots_need_charge.append(robot)    
+                if charging_stations:
+                    robot.target = charging_stations[0] #go to first charging station 
+                    robot.state = "moving"
+
+        if robots_need_charge:
+            for robot in robots_need_charge:
+                 path = self.path_planner.a_star(self.warehouse, robot.position, robot.target)
+                 if path:
+                     robot.path = path 
+
+
+        assignments = self.task_assigner.greedy_assignment(self.warehouse) # assign based on first match 
+        # assignments = self.task_assigner.optimal_assignment(self.warehouse) # optimal assignment
         
         for robot in self.warehouse.robots:
             if robot.state == "idle" and robot.id in assignments:
@@ -416,6 +445,17 @@ class WarehouseSimulator:
 
     def _move_robot(self, robot: Robot, robot_positions: Set[Position], dt: float):
         
+        #Battery drain every movement step 
+        if robot.state == "moving" and robot.path:
+            drain_amount = DRAIN_RATE * dt
+            robot.battery = max(0.0, robot.battery - drain_amount)
+
+        if robot.battery <= 0.0:
+            robot.state = "flat"
+            robot.path = []
+            robot.target = None
+            return
+
         #Robot already movin 
         if robot.state == "moving":
             if robot.path and robot.position == robot.path[0]:
