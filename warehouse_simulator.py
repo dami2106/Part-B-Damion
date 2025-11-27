@@ -52,7 +52,7 @@ class Order:
     """Represents a customer order"""
     id: int
     item_location: Position  # which shelf has the item
-    # priority: int = 1  # 1=normal, 2=high, 3=urgent
+    priority: int = 1  # 1=normal, 2=high, 3=urgent
     arrival_time: float = 0.0
     completion_time: Optional[float] = None
     
