@@ -15,8 +15,9 @@ from synthetic_data import SyntheticDataGenerator
 
 from scipy.optimize import linear_sum_assignment
 
-CHARGE_RATE = 2.0
-DRAIN_RATE = 0.5
+CHARGE_RATE = 5.0
+DRAIN_RATE = 0.1
+SEED = 42
 
 class CellType(Enum):
     EMPTY = 0
@@ -49,7 +50,7 @@ class Robot:
     state: str = "idle"  # idle, moving, picking, delivering, charging
     order_id: Optional[int] = None  # easier to track robot current order (so we can mark complete later)
     battery: float = 100.0  # battery level percentage
-    battery_thresh = 20.00 #when to top up 
+    battery_thresh: float = 20.00 #when to top up 
     
 
 @dataclass
@@ -340,10 +341,11 @@ class WarehouseSimulator:
         
         #One day for now with peaks at 9, and 5 
         df = gen.generate_poisson_events(
-            n_days=1, 
-            base_rate=20,  #base orders per hour         
+            n_days=7, 
+            base_rate=10,  #base orders per hour         
             peak_hours=[9, 17],
-            peak_multiplier=3.0    #how much busier are we at peak 
+            peak_multiplier=3.0,    #how much busier are we at peak,
+            seed=SEED
         )
         
         arrival_times = []
@@ -447,8 +449,7 @@ class WarehouseSimulator:
         
         #Battery drain every movement step 
         if robot.state == "moving" and robot.path:
-            drain_amount = DRAIN_RATE * dt
-            robot.battery = max(0.0, robot.battery - drain_amount)
+            robot.battery = max(0.0, robot.battery - DRAIN_RATE * dt)
 
         if robot.battery <= 0.0:
             robot.state = "flat"
@@ -565,7 +566,7 @@ class WarehouseSimulator:
 
 def main():
     """Example usage"""
-    np.random.seed(42)  # ensure reproducible runs
+    np.random.seed(SEED)  # ensure reproducible runs
     print("Warehouse Robot Fleet Coordination - Starter Code")
     print("=" * 50)
     

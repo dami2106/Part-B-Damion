@@ -15,8 +15,9 @@ from synthetic_data import SyntheticDataGenerator
 
 from scipy.optimize import linear_sum_assignment
 
-CHARGE_RATE = 2.0
-DRAIN_RATE = 0.5
+CHARGE_RATE = 5.0
+DRAIN_RATE = 0.1
+SEED = 42
 
 class CellType(Enum):
     EMPTY = 0
@@ -165,7 +166,7 @@ class PathPlanner:
 
         curr_node = None 
         final_state = None
-        max_time = start_time + 100 #had an issue where we got into inf loop, so limit search time
+        max_time = start_time + 200  #had an issue where we got into inf loop, so limit search time
 
 
 
@@ -237,26 +238,33 @@ class PathPlanner:
         all_paths = {} #Store path map robot -> path 
         reserved_states = set() #remember to store x, y, time now 
 
+        # new - reserve pos at t = 0 to prevent conflicts 
+        for r in robots:
+            reserved_states.add((r.position.x, r.position.y, 0))
+
+        total_wait = 0 
+
         for rob, goal in robot_goal_pairs:
             path = PathPlanner.a_star(warehouse, rob.position, goal, reserved_states)
             all_paths[rob.id] = path # still assigning the robot path 
 
+
             for time, pos in enumerate(path):
-                #path[0] os the next step so in futurem add +1 if 0 is curr time 
+                #path[0] os the next step so in futurem add 1 if 0 is curr time 
                 reserved_states.add((pos.x, pos.y, time + 1)) #reserve this cell at this time
+                # Count explicit waits (staying in same cell as before for each rob)
+                if time > 0 and pos.x == path[time - 1].x and pos.y == path[time - 1].y:
+                    total_wait += 1
 
 
-        if path: 
-            end = path[-1]
-            final_time = len(path) #time robot arrives at goal
-            for waiting_time in range(1, 3): # reserve the goal for 3 seconds after arrival to prevent crash 
-                reserved_states.add((end.x, end.y, final_time + waiting_time))
+            if path: 
+                end = path[-1]
+                final_time = len(path) #time robot arrives at goal
+                for waiting_time in range(1, 3): # reserve the goal for 2 seconds after arrival to prevent crash 
+                    reserved_states.add((end.x, end.y, final_time + waiting_time))
 
+        warehouse.total_collisions += total_wait
         return all_paths
-
-
-
-
 
 
     @staticmethod
@@ -277,7 +285,7 @@ class TaskAssigner:
         """
         assignment = {}
         
-        available_robots = [r for r in warehouse.robots if r.state == "idle"]
+        available_robots = [r for r in warehouse.robots if r.state == "idle" and r.battery > r.battery_thresh]
         pending_orders = [o for o in warehouse.orders if o.completion_time is None]
         
         #sort orders by priority (higher first)
@@ -313,7 +321,7 @@ class TaskAssigner:
         Returns: dict of robot_id -> order_id
         """
 
-        idle_robots = [r for r in warehouse.robots if r.state == "idle"]
+        idle_robots = [r for r in warehouse.robots if r.state == "idle" and r.battery > r.battery_thresh]
         n_robots = len(idle_robots)
         orders = [o for o in warehouse.orders if o.completion_time is None] #incomplete orders have no completion 
         n_orders = len(orders)
@@ -395,10 +403,11 @@ class WarehouseSimulator:
         
         #One day for now with peaks at 9, and 5 
         df = gen.generate_poisson_events(
-            n_days=1, 
-            base_rate=20,  #base orders per hour         
+            n_days=7, 
+            base_rate=10,  #base orders per hour         
             peak_hours=[9, 17],
-            peak_multiplier=3.0    #how much busier are we at peak 
+            peak_multiplier=3.0,    #how much busier are we at peak,
+            seed=SEED
         )
         
         arrival_times = []
@@ -440,11 +449,42 @@ class WarehouseSimulator:
         # if np.random.random() < 0.1:  # 10% chance per step
         #     self._generate_random_order()
         
+        robots_to_plan = [] #going to plan altogether now so we can avoid collisions
+        goals_to_plan = []
+
+        robots_needing_charge = []
+        charging_stations = self.charging_stations 
+
+        for robot in self.warehouse.robots: #if robot is on charge let it charge 
+            if robot.state == "charging":
+                robot.battery = min(100.0, robot.battery + CHARGE_RATE * dt) # Charge rate
+                if robot.battery >= 100.0:
+                    robot.state = "idle" #Fully charged 
+                continue 
+
+            # Check active robots if battery is nearly flat
+            if robot.state == "idle" and robot.battery <= robot.battery_thresh:
+                # Find nearest charger
+                if charging_stations:
+                    closest_station = min(charging_stations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
+                    robot.target = closest_station
+                    robot.state = "moving"
+                    robots_needing_charge.append(robot)
+                    robots_to_plan.append(robot)
+                    goals_to_plan.append(robot.target)
+
+        # if robots_needing_charge:
+        #     goals = [r.target for r in robots_needing_charge]
+        #     paths = self.path_planner.conflict_based_search(self.warehouse, robots_needing_charge, goals)
+        #     for r in robots_needing_charge:
+        #         if r.id in paths:
+        #             r.path = paths[r.id] #For robots that need to charge, set their paths
+
+
         # assignments = self.task_assigner.greedy_assignment(self.warehouse) # assign based on first match 
         assignments = self.task_assigner.optimal_assignment(self.warehouse) # optimal assignment
         
-        robots_to_plan = [] #going to plan altogether now so we can avoid collisions
-        goals_to_plan = []
+        
 
         for robot in self.warehouse.robots:
             if robot.state == "idle" and robot.id in assignments:
@@ -456,6 +496,13 @@ class WarehouseSimulator:
 
                 robots_to_plan.append(robot)
                 goals_to_plan.append(order.item_location)
+
+            #dont replan every step (may remove if buggy)
+            elif robot.state in ["picking", "delivering"]:
+                
+                if robot.target and not robot.path:
+                    robots_to_plan.append(robot)
+                    goals_to_plan.append(robot.target)
         
 
         #  re-plan for robots already moving or picking 
@@ -473,7 +520,7 @@ class WarehouseSimulator:
                     rob.path = panned_paths[rob.id]
                     if rob.path:
                         rob.state = "moving"
-                    elif robot.position == rob.target:
+                    elif rob.position == rob.target:
                         pass #already at target no need to move
                     else:
                         pass
@@ -498,6 +545,14 @@ class WarehouseSimulator:
     def _move_robot(self, robot: Robot, robot_positions: Set[Position], dt: float):
             """Move robot one step along its path"""
             
+            if robot.state == "moving" and robot.path:
+                robot.battery = max(0.0, robot.battery - DRAIN_RATE * dt) # drain battery 
+
+            if robot.battery <= 0.0:
+                robot.state = "flat"
+                robot.path = []
+                return
+
             # have a path and either moving or need to move 
             if robot.path and robot.state in ["moving", "idle"]:
                 robot.state = "moving"
@@ -513,11 +568,17 @@ class WarehouseSimulator:
                 robot.path.pop(0) #Remove next step from the path to move 
 
             if robot.target is not None and robot.position == robot.target: #Arrived at target 
+                
+                if robot.position in self.charging_stations: #hack to set charging state without adding a moving to charge state
+                    robot.state = "charging"
+                    robot.path = []
+                    return
+
                 if not robot.carrying_item:
-                    robot.state = "picking" #Picking item, path reset 
+                    robot.state = "picking" #Picking item, path reset (on shelf)
                     robot.path = []
                 else: 
-                    robot.state = "delivering" #Delivering now path reset 
+                    robot.state = "delivering" #Delivering now path reset (on dock)
                     robot.path = []
 
             if robot.state == "picking": #on shelf picking order 
@@ -586,7 +647,7 @@ class WarehouseSimulator:
 
 def main():
     """Example usage"""
-    np.random.seed(42)  # ensure reproducible runs
+    np.random.seed(SEED)  # ensure reproducible runs
     print("Warehouse Robot Fleet Coordination - Starter Code")
     print("=" * 50)
     
