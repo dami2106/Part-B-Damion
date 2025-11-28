@@ -10,7 +10,7 @@ import warehouse_simulator_coop_astar as ws_coop
 
 # ...existing code...
 # Benchmark configuration
-NUM_ROBOTS = 15
+NUM_ROBOTS = 10
 WAREHOUSE_W = 30
 WAREHOUSE_H = 30
 

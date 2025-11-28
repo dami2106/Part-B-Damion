@@ -83,21 +83,35 @@ class Warehouse:
         self._create_layout()
         
     def _create_layout(self):
-        """Create warehouse layout with shelves, docks, charging stations"""
-        # TODO: Design warehouse layout
-        # Example: shelves in grid pattern, loading dock at bottom, charging stations
         
-        # Add some shelves (example)
         for i in range(2, self.height - 2, 3):
             for j in range(2, self.width - 2, 3):
-                self.grid[i, j] = CellType.SHELF.value
+                self.grid[i, j] = CellType.SHELF.value # Place shelves in a grid pattern
+         
+        #Exttra shelves to increase density (hopefully more clashes makes it harder)
+        for i in [3, 6, 9]:
+            for j in [4, 7, 10]:
+                if self.grid[i, j] == CellType.EMPTY.value:
+                    self.grid[i, j] = CellType.SHELF.value
         
-        # Loading dock at bottom
-        self.grid[-1, self.width // 2] = CellType.LOADING_DOCK.value
+        # Loading docks: top middle, right middle, bottom middle, left middle
+        dock_positions = [
+            (0, self.width // 2),              # Top middle
+            (self.height // 2, self.width - 1), # Right middle
+            (self.height - 1, self.width // 2), # Bottom middle
+            (self.height // 2, 0),              # Left middle
+        ]
+        for y, x in dock_positions:
+            self.grid[y, x] = CellType.LOADING_DOCK.value
         
-        # Charging stations
-        self.grid[0, 0] = CellType.CHARGING_STATION.value
-        self.grid[0, -1] = CellType.CHARGING_STATION.value
+        charging_positions = [
+            (0, 0),
+            (0, self.width - 1),
+            (self.height - 1, 0),
+            (self.height - 1, self.width - 1),
+        ]
+        for y, x in charging_positions:
+            self.grid[y, x] = CellType.CHARGING_STATION.value
         
     def add_robot(self, position: Position):
         """Add a robot to the warehouse"""
