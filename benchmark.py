@@ -10,14 +10,14 @@ import warehouse_simulator_coop_astar as ws_coop
 
 # ...existing code...
 # Benchmark configuration
-NUM_ROBOTS = 10
+NUM_ROBOTS = 15
 WAREHOUSE_W = 30
 WAREHOUSE_H = 30
 
 # Order generation configuration
-PEAK_HOURS = [9, 17]  # Hours of day when orders peak
-BASE_RATE = 5
-PEAK_MULTIPLIER = 3.0
+PEAK_HOURS = [8, 17]  # Hours of day when orders peak
+BASE_RATE = 8
+PEAK_MULTIPLIER = 2.0
 
 # 24 hours * 60 steps/hour
 STEPS_DAY = 24 * 60
@@ -39,6 +39,9 @@ METRIC_KEYS = [
     "count_P2",
     "count_P3",
     "orders_received",
+    "avg_battery",
+    "min_battery",
+    "charging_robots",
 ]
 
 def run_simulation_baseline(steps: int, seed: int) -> List[Dict]:
@@ -163,15 +166,16 @@ def plot_orders_rate_hourly(time_axis: np.ndarray, baseline_stats: Dict[str, np.
     # Detect actual peaks from the data (use first 24 hours for daily pattern)
     detected_peaks = []
     if scope == "day":
-        # Find top 2 peaks in first 24 hours
+        # Find top N peaks in first 24 hours (N = number of PEAK_HOURS)
+        num_expected_peaks = len(PEAK_HOURS)
         daily_data = avg_hourly[:24]
         # Find peaks that are local maxima
         from scipy.signal import find_peaks
         peaks, properties = find_peaks(daily_data, height=np.mean(daily_data))
-        if len(peaks) >= 2:
-            # Get top 2 peaks
+        if len(peaks) >= num_expected_peaks:
+            # Get top N peaks
             peak_heights = daily_data[peaks]
-            top_peak_indices = np.argsort(peak_heights)[-2:]
+            top_peak_indices = np.argsort(peak_heights)[-num_expected_peaks:]
             detected_peaks = sorted(peaks[top_peak_indices].tolist())
     
     # Add markers based on scope
@@ -223,6 +227,11 @@ def plot_all(time_axis_hours: np.ndarray, agg_baseline: Dict[str, Dict[str, np.n
     plot_metric(time_axis_hours, agg_baseline["count_P1"], agg_coop["count_P1"], f"{scope_title}: Normal Priority Orders Completed", "Orders", f"{scope}_count_normal.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["count_P2"], agg_coop["count_P2"], f"{scope_title}: High Priority Orders Completed", "Orders", f"{scope}_count_high.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["count_P3"], agg_coop["count_P3"], f"{scope_title}: Urgent Priority Orders Completed", "Orders", f"{scope}_count_urgent.png", scope, detected_peaks)
+
+    # Battery metrics
+    plot_metric(time_axis_hours, agg_baseline["avg_battery"], agg_coop["avg_battery"], f"{scope_title}: Average Robot Battery Level", "Battery %", f"{scope}_avg_battery.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["min_battery"], agg_coop["min_battery"], f"{scope_title}: Minimum Robot Battery Level", "Battery %", f"{scope}_min_battery.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["charging_robots"], agg_coop["charging_robots"], f"{scope_title}: Number of Robots Charging", "Robots", f"{scope}_charging_robots.png", scope, detected_peaks)
 
 def run_benchmark(seeds: List[int], steps: int, scope_title: str, scope: str):
     # Run both simulators across seeds

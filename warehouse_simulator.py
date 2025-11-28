@@ -16,7 +16,7 @@ from synthetic_data import SyntheticDataGenerator
 from scipy.optimize import linear_sum_assignment
 
 CHARGE_RATE = 5.0
-DRAIN_RATE = 0.1
+DRAIN_RATE = 0.4
 SEED = 42
 
 class CellType(Enum):
@@ -50,7 +50,7 @@ class Robot:
     state: str = "idle"  # idle, moving, picking, delivering, charging
     order_id: Optional[int] = None  # easier to track robot current order (so we can mark complete later)
     battery: float = 100.0  # battery level percentage
-    battery_thresh: float = 20.00 #when to top up 
+    battery_thresh: float = 30.00 #when to top up 
 
     move_steps: int = 0
     wait_steps: int = 0
@@ -349,9 +349,9 @@ class WarehouseSimulator:
         #One day for now with peaks at 9, and 5 
         df = gen.generate_poisson_events(
             n_days=7, 
-            base_rate=5,  #base orders per hour         
-            peak_hours=[9, 17],
-            peak_multiplier=3.0,    #how much busier are we at peak,
+            base_rate=8,  #base orders per hour         
+            peak_hours=[8, 17],
+            peak_multiplier=2.0,    #how much busier are we at peak,
             seed=SEED
         )
         
@@ -559,6 +559,12 @@ class WarehouseSimulator:
         total_move = sum(r.move_steps for r in self.warehouse.robots)
         coord_overhead = (total_wait / (total_wait + total_move)) if (total_wait + total_move) > 0 else 0.0
 
+        # battery metrics
+        battery_levels = [r.battery for r in self.warehouse.robots]
+        avg_battery = np.mean(battery_levels) if battery_levels else 0
+        min_battery = np.min(battery_levels) if battery_levels else 0
+        charging_robots = sum(1 for r in self.warehouse.robots if r.state == "charging")
+
         metrics = {
             'total_completed': len(completed),
             'avg_time_all': np.mean(total_times) if total_times else 0,
@@ -566,6 +572,9 @@ class WarehouseSimulator:
             'coord_overhead': coord_overhead,
             'total_wait_steps': total_wait,
             'total_move_steps': total_move,
+            'avg_battery': avg_battery,
+            'min_battery': min_battery,
+            'charging_robots': charging_robots,
         }
         for p in [1, 2, 3]:
             metrics[f'avg_time_P{p}'] = np.mean(prio_times[p]) if prio_times[p] else 0
