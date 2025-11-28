@@ -342,12 +342,14 @@ class WarehouseSimulator:
 
     #Daily schedule generated using the given synthetic data generator
     def _generate_daily_schedule(self):
+
+        schedule_rng = np.random.RandomState(SEED)
         gen = SyntheticDataGenerator()
         
         #One day for now with peaks at 9, and 5 
         df = gen.generate_poisson_events(
             n_days=7, 
-            base_rate=10,  #base orders per hour         
+            base_rate=5,  #base orders per hour         
             peak_hours=[9, 17],
             peak_multiplier=3.0,    #how much busier are we at peak,
             seed=SEED
