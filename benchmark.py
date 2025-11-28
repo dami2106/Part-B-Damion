@@ -44,6 +44,24 @@ METRIC_KEYS = [
     "charging_robots",
 ]
 
+# Smoothing configuration (window length in steps). 60 steps = 1 hour.
+SMOOTHING_WINDOW_STEPS = 60
+
+def moving_average(data: np.ndarray, window: int, ignore_zeros: bool = True) -> np.ndarray:
+    """Compute trailing moving average. If ignore_zeros, treat zeros as NaN (no completions)."""
+    arr = np.array(data, dtype=float)
+    if ignore_zeros:
+        arr = np.where(arr == 0, np.nan, arr)
+    out = np.empty_like(arr)
+    for i in range(len(arr)):
+        start = max(0, i - window + 1)
+        segment = arr[start:i+1]
+        if np.all(np.isnan(segment)):
+            out[i] = np.nan
+        else:
+            out[i] = np.nanmean(segment)
+    return out
+
 def run_simulation_baseline(steps: int, seed: int) -> List[Dict]:
     # Ensure same randomness as schedule generation
     np.random.seed(seed)
@@ -105,19 +123,29 @@ def aggregate_runs(runs: List[List[Dict]]) -> Dict[str, np.ndarray]:
         }
     return agg
 
-def plot_metric(time_axis: np.ndarray, baseline_stats: Dict[str, np.ndarray], coop_stats: Dict[str, np.ndarray], title: str, ylabel: str, filename: str, scope: str, peak_hours_to_mark: List[int] = None):
+def plot_metric(time_axis: np.ndarray, baseline_stats: Dict[str, np.ndarray], coop_stats: Dict[str, np.ndarray], title: str, ylabel: str, filename: str, scope: str, peak_hours_to_mark: List[int] = None, smooth: bool = False):
     plt.figure(figsize=(10, 6))
     # Baseline
     b_mean = baseline_stats["mean"]
     b_std = baseline_stats["std"]
-    plt.plot(time_axis, b_mean, label="Baseline", color="#1f77b4")
-    plt.fill_between(time_axis, b_mean - b_std, b_mean + b_std, color="#1f77b4", alpha=0.2)
+    if smooth:
+        b_smooth = moving_average(b_mean, SMOOTHING_WINDOW_STEPS)
+        plt.plot(time_axis, b_mean, label="Baseline (raw)", color="#1f77b4", alpha=0.25)
+        plt.plot(time_axis, b_smooth, label="Baseline (smoothed)", color="#1f77b4")
+    else:
+        plt.plot(time_axis, b_mean, label="Baseline", color="#1f77b4")
+    plt.fill_between(time_axis, b_mean - b_std, b_mean + b_std, color="#1f77b4", alpha=0.1)
 
     # Cooperative
     c_mean = coop_stats["mean"]
     c_std = coop_stats["std"]
-    plt.plot(time_axis, c_mean, label="Cooperative A*", color="#ff7f0e")
-    plt.fill_between(time_axis, c_mean - c_std, c_mean + c_std, color="#ff7f0e", alpha=0.2)
+    if smooth:
+        c_smooth = moving_average(c_mean, SMOOTHING_WINDOW_STEPS)
+        plt.plot(time_axis, c_mean, label="Coop A* (raw)", color="#ff7f0e", alpha=0.25)
+        plt.plot(time_axis, c_smooth, label="Coop A* (smoothed)", color="#ff7f0e")
+    else:
+        plt.plot(time_axis, c_mean, label="Cooperative A*", color="#ff7f0e")
+    plt.fill_between(time_axis, c_mean - c_std, c_mean + c_std, color="#ff7f0e", alpha=0.1)
 
     # Add markers based on scope
     if scope == "week":
@@ -213,15 +241,15 @@ def plot_all(time_axis_hours: np.ndarray, agg_baseline: Dict[str, Dict[str, np.n
     plot_metric(time_axis_hours, agg_baseline["pending_orders"], agg_coop["pending_orders"], f"{scope_title}: Pending Orders", "Orders", f"{scope}_pending_orders.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["orders_received"], agg_coop["orders_received"], f"{scope_title}: Orders Received (per Step)", "Orders", f"{scope}_orders_received.png", scope, detected_peaks)
     
-    plot_metric(time_axis_hours, agg_baseline["avg_time_all"], agg_coop["avg_time_all"], f"{scope_title}: Avg Completion Time (All)", "Steps", f"{scope}_avg_time_all.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_all"], agg_coop["avg_time_all"], f"{scope_title}: Avg Completion Time (All)", "Steps (instantaneous avg, smoothed 1h)", f"{scope}_avg_time_all.png", scope, detected_peaks, smooth=True)
     plot_metric(time_axis_hours, agg_baseline["coord_overhead"], agg_coop["coord_overhead"], f"{scope_title}: Coordination Overhead", "Wait / (Wait + Move)", f"{scope}_coord_overhead.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["total_wait_steps"], agg_coop["total_wait_steps"], f"{scope_title}: Total Wait Steps", "Steps", f"{scope}_total_wait_steps.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["total_move_steps"], agg_coop["total_move_steps"], f"{scope_title}: Total Move Steps", "Steps", f"{scope}_total_move_steps.png", scope, detected_peaks)
 
     # Priority-specific completion times
-    plot_metric(time_axis_hours, agg_baseline["avg_time_P1"], agg_coop["avg_time_P1"], f"{scope_title}: Avg Completion Time (Normal Priority)", "Steps", f"{scope}_avg_time_normal.png", scope, detected_peaks)
-    plot_metric(time_axis_hours, agg_baseline["avg_time_P2"], agg_coop["avg_time_P2"], f"{scope_title}: Avg Completion Time (High Priority)", "Steps", f"{scope}_avg_time_high.png", scope, detected_peaks)
-    plot_metric(time_axis_hours, agg_baseline["avg_time_P3"], agg_coop["avg_time_P3"], f"{scope_title}: Avg Completion Time (Urgent Priority)", "Steps", f"{scope}_avg_time_urgent.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_P1"], agg_coop["avg_time_P1"], f"{scope_title}: Avg Completion Time (Normal Priority)", "Steps (instantaneous avg, smoothed 1h)", f"{scope}_avg_time_normal.png", scope, detected_peaks, smooth=True)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_P2"], agg_coop["avg_time_P2"], f"{scope_title}: Avg Completion Time (High Priority)", "Steps (instantaneous avg, smoothed 1h)", f"{scope}_avg_time_high.png", scope, detected_peaks, smooth=True)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_P3"], agg_coop["avg_time_P3"], f"{scope_title}: Avg Completion Time (Urgent Priority)", "Steps (instantaneous avg, smoothed 1h)", f"{scope}_avg_time_urgent.png", scope, detected_peaks, smooth=True)
 
     # Priority-specific counts
     plot_metric(time_axis_hours, agg_baseline["count_P1"], agg_coop["count_P1"], f"{scope_title}: Normal Priority Orders Completed", "Orders", f"{scope}_count_normal.png", scope, detected_peaks)

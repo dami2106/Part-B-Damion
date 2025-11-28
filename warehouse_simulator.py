@@ -354,6 +354,7 @@ class WarehouseSimulator:
     
         self.order_schedule = self._generate_daily_schedule()
         self.next_order_index = 0
+        self.prev_completed_count = 0  # Track previous step's completed count
 
     #Daily schedule generated using the given synthetic data generator
     def _generate_daily_schedule(self):
@@ -561,8 +562,12 @@ class WarehouseSimulator:
     
     def get_metrics(self) -> Dict:
         completed = self.warehouse.completed_orders
+        # Only consider orders completed since last call
+        new_completed = completed[self.prev_completed_count:]
+        self.prev_completed_count = len(completed)
+        
         prio_times = {1: [], 2: [], 3: []}
-        for o in completed:
+        for o in new_completed:
             if o.completion_time:
                 duration = o.completion_time - o.arrival_time
                 prio_times[o.priority].append(duration)

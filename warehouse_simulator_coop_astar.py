@@ -239,7 +239,7 @@ class PathPlanner:
 
     
     @staticmethod
-    def conflict_based_search(warehouse: Warehouse,
+    def prioritized_path_planning(warehouse: Warehouse,
                              robots: List[Robot],
                              goals: List[Position]) -> Dict[int, List[Position]]:
         """
@@ -402,6 +402,7 @@ class WarehouseSimulator:
     
         self.order_schedule = self._generate_daily_schedule()
         self.next_order_index = 0
+        self.prev_completed_count = 0  # Track previous step's completed count
 
     #Daily schedule generated using the given synthetic data generator
     def _generate_daily_schedule(self):
@@ -484,7 +485,7 @@ class WarehouseSimulator:
 
         # if robots_needing_charge:
         #     goals = [r.target for r in robots_needing_charge]
-        #     paths = self.path_planner.conflict_based_search(self.warehouse, robots_needing_charge, goals)
+        #     paths = self.path_planner.prioritized_path_planning(self.warehouse, robots_needing_charge, goals)
         #     for r in robots_needing_charge:
         #         if r.id in paths:
         #             r.path = paths[r.id] #For robots that need to charge, set their paths
@@ -522,7 +523,7 @@ class WarehouseSimulator:
                     goals_to_plan.append(robot.target)
 
         if robots_to_plan:
-            panned_paths = self.path_planner.conflict_based_search(self.warehouse, robots_to_plan, goals_to_plan)
+            panned_paths = self.path_planner.prioritized_path_planning(self.warehouse, robots_to_plan, goals_to_plan)
 
             for rob in robots_to_plan:
                 if rob.id in panned_paths:
@@ -626,8 +627,12 @@ class WarehouseSimulator:
     
     def get_metrics(self) -> Dict:
         completed = self.warehouse.completed_orders
+        # Only consider orders completed since last call
+        new_completed = completed[self.prev_completed_count:]
+        self.prev_completed_count = len(completed)
+        
         prio_times = {1: [], 2: [], 3: []}
-        for o in completed:
+        for o in new_completed:
             if o.completion_time:
                 duration = o.completion_time - o.arrival_time
                 prio_times[o.priority].append(duration)
