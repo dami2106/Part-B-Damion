@@ -387,6 +387,105 @@ def plot_orders_rate_hourly(time_axis: np.ndarray,
     
     return detected_peaks  # Return for use in other plots
 
+def extract_final_avg_times(runs: List[List[Dict]]) -> Dict[str, Dict[str, float]]:
+    """
+    Extract final average completion times per priority from runs.
+    Returns dict with priority -> {mean, std} across seeds.
+    """
+    final_times = {
+        "P1": [],
+        "P2": [],
+        "P3": []
+    }
+    
+    for run in runs:
+        # Get the final metrics (last step)
+        final_metrics = run[-1]
+        final_times["P1"].append(final_metrics.get("avg_time_P1", 0))
+        final_times["P2"].append(final_metrics.get("avg_time_P2", 0))
+        final_times["P3"].append(final_metrics.get("avg_time_P3", 0))
+    
+    result = {}
+    for priority in ["P1", "P2", "P3"]:
+        times_array = np.array(final_times[priority])
+        # Filter out zeros (no orders of that priority completed)
+        valid_times = times_array[times_array > 0]
+        if len(valid_times) > 0:
+            result[priority] = {
+                "mean": np.mean(valid_times),
+                "std": np.std(valid_times)
+            }
+        else:
+            result[priority] = {
+                "mean": 0.0,
+                "std": 0.0
+            }
+    
+    return result
+
+def plot_priority_completion_times(
+    baseline_stats: Dict[str, Dict[str, float]],
+    coop_stats: Dict[str, Dict[str, float]],
+    ml_stats: Dict[str, Dict[str, float]],
+    title: str,
+    filename: str
+):
+    """
+    Create bar chart comparing average completion times by priority.
+    Each priority has 3 bars: Baseline, Cooperative A*, ML
+    """
+    priorities = ["P1", "P2", "P3"]
+    priority_labels = ["Normal", "High", "Urgent"]
+    
+    x = np.arange(len(priorities))
+    width = 0.25  # Width of bars
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Extract means and stds
+    baseline_means = [baseline_stats[p]["mean"] for p in priorities]
+    baseline_stds = [baseline_stats[p]["std"] for p in priorities]
+    
+    coop_means = [coop_stats[p]["mean"] for p in priorities]
+    coop_stds = [coop_stats[p]["std"] for p in priorities]
+    
+    ml_means = [ml_stats[p]["mean"] for p in priorities]
+    ml_stds = [ml_stats[p]["std"] for p in priorities]
+    
+    # Create bars
+    bars1 = ax.bar(x - width, baseline_means, width, label="Baseline", 
+                   color="#1f77b4", yerr=baseline_stds, capsize=5)
+    bars2 = ax.bar(x, coop_means, width, label="Cooperative A*", 
+                   color="#ff7f0e", yerr=coop_stds, capsize=5)
+    bars3 = ax.bar(x + width, ml_means, width, label="ML", 
+                   color="#2ca02c", yerr=ml_stds, capsize=5)
+    
+    # Add value labels on bars
+    def add_value_labels(bars):
+        for bar in bars:
+            height = bar.get_height()
+            if height > 0:
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:.1f}',
+                       ha='center', va='bottom', fontsize=9)
+    
+    add_value_labels(bars1)
+    add_value_labels(bars2)
+    add_value_labels(bars3)
+    
+    ax.set_xlabel("Order Priority", fontsize=12)
+    ax.set_ylabel("Average Completion Time (Steps)", fontsize=12)
+    ax.set_title(title, fontsize=14)
+    ax.set_xticks(x)
+    ax.set_xticklabels(priority_labels)
+    ax.legend()
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    os.makedirs('figs', exist_ok=True)
+    plt.savefig(f'figs/{filename}', dpi=300, bbox_inches='tight')
+    plt.close()
+
 def plot_all(time_axis_hours: np.ndarray,
              agg_baseline: Dict[str, Dict[str, np.ndarray]],
              agg_coop: Dict[str, Dict[str, np.ndarray]],
@@ -468,6 +567,19 @@ def run_benchmark(seeds: List[int], steps: int, scope_title: str, scope: str):
     time_axis_hours = np.arange(steps) / 60.0
     # Plot
     plot_all(time_axis_hours, agg_b, agg_c, agg_m, scope_title, scope)
+    
+    # Extract final average completion times per priority and create bar charts
+    final_baseline = extract_final_avg_times(runs_baseline)
+    final_coop = extract_final_avg_times(runs_coop)
+    final_ml = extract_final_avg_times(runs_ml)
+    
+    plot_priority_completion_times(
+        final_baseline,
+        final_coop,
+        final_ml,
+        f"{scope_title}: Average Completion Time by Priority",
+        f"{scope}_priority_completion_times.png"
+    )
 
 def main():
     # Standard set of seeds in benchmarking: 5 seeds
