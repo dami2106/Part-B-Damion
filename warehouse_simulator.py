@@ -513,14 +513,16 @@ class WarehouseSimulator:
 
             next_pos = robot.path[0]
 
-            # naive way to prevent collision just wait until the robot on our path has left 
-            if next_pos in robot_positions and next_pos != robot.position: 
-                robot.wait_steps += 1
-                return 
-
             # advance
             prev_pos = robot.position
-            robot_positions.remove(robot.position) 
+            robot_positions.remove(robot.position)
+            
+            # naive way to prevent collision just wait until the robot on our path has left 
+            if next_pos in robot_positions: 
+                robot_positions.add(robot.position)  # stay in current position
+                robot.wait_steps += 1
+                return 
+            
             robot.position = next_pos
             robot_positions.add(robot.position) #update the robot cells list 
             robot.path.pop(0)
@@ -544,7 +546,9 @@ class WarehouseSimulator:
             
             
             if self.dock_locations:
-                robot.target = self.dock_locations[0]
+                # Find nearest doc
+                closest_dock = min(self.dock_locations, key=lambda pos: PathPlanner.manhattan(robot.position, pos))
+                robot.target = closest_dock
         
             robot.path = PathPlanner.a_star(self.warehouse, robot.position, robot.target)
             if robot.path:
