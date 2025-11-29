@@ -134,6 +134,118 @@ def aggregate_runs(runs: List[List[Dict]]) -> Dict[str, np.ndarray]:
         }
     return agg
 
+def compute_rolling_avg_time(runs: List[List[Dict]], window_steps: int = 60) -> Dict[str, np.ndarray]:
+    """
+    Compute rolling window average completion times.
+    Only shows values when there's been recent completion activity.
+    
+    Uses weighted average formula to compute average for orders completed in the window:
+    If at t-window: N orders, avg = A
+    If at t: M orders, avg = B
+    Then average for (M-N) orders in window = (M*B - N*A) / (M-N)
+    """
+    steps = len(runs[0])
+    num_seeds = len(runs)
+    
+    # Track rolling averages for each priority level
+    rolling_metrics = {
+        "avg_time_all": [],
+        "avg_time_P1": [],
+        "avg_time_P2": [],
+        "avg_time_P3": [],
+    }
+    
+    for seed_idx in range(num_seeds):
+        run = runs[seed_idx]
+        
+        rolling_all = []
+        rolling_p1 = []
+        rolling_p2 = []
+        rolling_p3 = []
+        
+        for t in range(steps):
+            # Get current metrics
+            current = run[t]
+            prev_t = max(0, t - window_steps)
+            prev = run[prev_t]
+            
+            # Calculate rolling average using weighted average formula
+            # For all orders
+            n_prev = prev['total_completed']
+            n_curr = current['total_completed']
+            avg_prev = prev['avg_time_all'] if n_prev > 0 else 0
+            avg_curr = current['avg_time_all'] if n_curr > 0 else 0
+            
+            recent_completed = n_curr - n_prev
+            if recent_completed > 0:
+                # Calculate average for orders in window: (total_curr - total_prev) / count
+                # total_curr = n_curr * avg_curr, total_prev = n_prev * avg_prev
+                total_time_curr = n_curr * avg_curr
+                total_time_prev = n_prev * avg_prev
+                window_avg = (total_time_curr - total_time_prev) / recent_completed
+                rolling_all.append(window_avg)
+            else:
+                # No recent activity - show NaN
+                rolling_all.append(np.nan)
+            
+            # For P1
+            n_prev_p1 = prev['count_P1']
+            n_curr_p1 = current['count_P1']
+            avg_prev_p1 = prev['avg_time_P1'] if n_prev_p1 > 0 else 0
+            avg_curr_p1 = current['avg_time_P1'] if n_curr_p1 > 0 else 0
+            recent_p1 = n_curr_p1 - n_prev_p1
+            if recent_p1 > 0:
+                total_time_curr_p1 = n_curr_p1 * avg_curr_p1
+                total_time_prev_p1 = n_prev_p1 * avg_prev_p1
+                window_avg_p1 = (total_time_curr_p1 - total_time_prev_p1) / recent_p1
+                rolling_p1.append(window_avg_p1)
+            else:
+                rolling_p1.append(np.nan)
+            
+            # For P2
+            n_prev_p2 = prev['count_P2']
+            n_curr_p2 = current['count_P2']
+            avg_prev_p2 = prev['avg_time_P2'] if n_prev_p2 > 0 else 0
+            avg_curr_p2 = current['avg_time_P2'] if n_curr_p2 > 0 else 0
+            recent_p2 = n_curr_p2 - n_prev_p2
+            if recent_p2 > 0:
+                total_time_curr_p2 = n_curr_p2 * avg_curr_p2
+                total_time_prev_p2 = n_prev_p2 * avg_prev_p2
+                window_avg_p2 = (total_time_curr_p2 - total_time_prev_p2) / recent_p2
+                rolling_p2.append(window_avg_p2)
+            else:
+                rolling_p2.append(np.nan)
+            
+            # For P3
+            n_prev_p3 = prev['count_P3']
+            n_curr_p3 = current['count_P3']
+            avg_prev_p3 = prev['avg_time_P3'] if n_prev_p3 > 0 else 0
+            avg_curr_p3 = current['avg_time_P3'] if n_curr_p3 > 0 else 0
+            recent_p3 = n_curr_p3 - n_prev_p3
+            if recent_p3 > 0:
+                total_time_curr_p3 = n_curr_p3 * avg_curr_p3
+                total_time_prev_p3 = n_prev_p3 * avg_prev_p3
+                window_avg_p3 = (total_time_curr_p3 - total_time_prev_p3) / recent_p3
+                rolling_p3.append(window_avg_p3)
+            else:
+                rolling_p3.append(np.nan)
+        
+        rolling_metrics["avg_time_all"].append(rolling_all)
+        rolling_metrics["avg_time_P1"].append(rolling_p1)
+        rolling_metrics["avg_time_P2"].append(rolling_p2)
+        rolling_metrics["avg_time_P3"].append(rolling_p3)
+    
+    # Aggregate across seeds
+    result = {}
+    for key in rolling_metrics:
+        data = np.array(rolling_metrics[key], dtype=float)
+        result[key] = {
+            "mean": np.nanmean(data, axis=0),
+            "std": np.nanstd(data, axis=0),
+        }
+    
+    return result
+
 def plot_metric(time_axis: np.ndarray,
                 baseline_stats: Dict[str, np.ndarray],
                 coop_stats: Dict[str, np.ndarray],
@@ -144,20 +256,37 @@ def plot_metric(time_axis: np.ndarray,
     # Baseline
     b_mean = baseline_stats["mean"]
     b_std = baseline_stats["std"]
+    # Handle NaN values - matplotlib will automatically create gaps
     plt.plot(time_axis, b_mean, label="Baseline", color="#1f77b4")
-    plt.fill_between(time_axis, b_mean - b_std, b_mean + b_std, color="#1f77b4", alpha=0.2)
+    # Only fill between where we have valid data
+    valid_mask_b = ~np.isnan(b_mean)
+    if np.any(valid_mask_b):
+        plt.fill_between(time_axis[valid_mask_b], 
+                         (b_mean - b_std)[valid_mask_b], 
+                         (b_mean + b_std)[valid_mask_b], 
+                         color="#1f77b4", alpha=0.2)
 
     # Cooperative
     c_mean = coop_stats["mean"]
     c_std = coop_stats["std"]
     plt.plot(time_axis, c_mean, label="Cooperative A*", color="#ff7f0e")
-    plt.fill_between(time_axis, c_mean - c_std, c_mean + c_std, color="#ff7f0e", alpha=0.2)
+    valid_mask_c = ~np.isnan(c_mean)
+    if np.any(valid_mask_c):
+        plt.fill_between(time_axis[valid_mask_c], 
+                         (c_mean - c_std)[valid_mask_c], 
+                         (c_mean + c_std)[valid_mask_c], 
+                         color="#ff7f0e", alpha=0.2)
 
     # ML
     m_mean = ml_stats["mean"]
     m_std = ml_stats["std"]
     plt.plot(time_axis, m_mean, label="ML", color="#2ca02c")
-    plt.fill_between(time_axis, m_mean - m_std, m_mean + m_std, color="#2ca02c", alpha=0.2)
+    valid_mask_m = ~np.isnan(m_mean)
+    if np.any(valid_mask_m):
+        plt.fill_between(time_axis[valid_mask_m], 
+                         (m_mean - m_std)[valid_mask_m], 
+                         (m_mean + m_std)[valid_mask_m], 
+                         color="#2ca02c", alpha=0.2)
 
     # Add markers based on scope
     if scope == "week":
@@ -221,7 +350,6 @@ def plot_orders_rate_hourly(time_axis: np.ndarray,
         num_expected_peaks = len(PEAK_HOURS)
         daily_data = avg_hourly[:24]
         # Find peaks that are local maxima
-        from scipy.signal import find_peaks
         peaks, properties = find_peaks(daily_data, height=np.mean(daily_data))
         if len(peaks) >= num_expected_peaks:
             # Get top N peaks
@@ -280,15 +408,15 @@ def plot_all(time_axis_hours: np.ndarray,
     plot_metric(time_axis_hours, agg_baseline["pending_orders"], agg_coop["pending_orders"], agg_ml["pending_orders"], f"{scope_title}: Pending Orders", "Orders", f"{scope}_pending_orders.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["orders_received"], agg_coop["orders_received"], agg_ml["orders_received"], f"{scope_title}: Orders Received (per Step)", "Orders", f"{scope}_orders_received.png", scope, detected_peaks)
     
-    plot_metric(time_axis_hours, agg_baseline["avg_time_all"], agg_coop["avg_time_all"], agg_ml["avg_time_all"], f"{scope_title}: Avg Completion Time (All)", "Steps", f"{scope}_avg_time_all.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_all"], agg_coop["avg_time_all"], agg_ml["avg_time_all"], f"{scope_title}: Avg Completion Time (All) - Rolling 1h Window", "Steps", f"{scope}_avg_time_all.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["coord_overhead"], agg_coop["coord_overhead"], agg_ml["coord_overhead"], f"{scope_title}: Coordination Overhead", "Wait / (Wait + Move)", f"{scope}_coord_overhead.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["total_wait_steps"], agg_coop["total_wait_steps"], agg_ml["total_wait_steps"], f"{scope_title}: Total Wait Steps", "Steps", f"{scope}_total_wait_steps.png", scope, detected_peaks)
     plot_metric(time_axis_hours, agg_baseline["total_move_steps"], agg_coop["total_move_steps"], agg_ml["total_move_steps"], f"{scope_title}: Total Move Steps", "Steps", f"{scope}_total_move_steps.png", scope, detected_peaks)
 
     # Priority-specific completion times
-    plot_metric(time_axis_hours, agg_baseline["avg_time_P1"], agg_coop["avg_time_P1"], agg_ml["avg_time_P1"], f"{scope_title}: Avg Completion Time (Normal Priority)", "Steps", f"{scope}_avg_time_normal.png", scope, detected_peaks)
-    plot_metric(time_axis_hours, agg_baseline["avg_time_P2"], agg_coop["avg_time_P2"], agg_ml["avg_time_P2"], f"{scope_title}: Avg Completion Time (High Priority)", "Steps", f"{scope}_avg_time_high.png", scope, detected_peaks)
-    plot_metric(time_axis_hours, agg_baseline["avg_time_P3"], agg_coop["avg_time_P3"], agg_ml["avg_time_P3"], f"{scope_title}: Avg Completion Time (Urgent Priority)", "Steps", f"{scope}_avg_time_urgent.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_P1"], agg_coop["avg_time_P1"], agg_ml["avg_time_P1"], f"{scope_title}: Avg Completion Time (Normal Priority) - Rolling 1h Window", "Steps", f"{scope}_avg_time_normal.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_P2"], agg_coop["avg_time_P2"], agg_ml["avg_time_P2"], f"{scope_title}: Avg Completion Time (High Priority) - Rolling 1h Window", "Steps", f"{scope}_avg_time_high.png", scope, detected_peaks)
+    plot_metric(time_axis_hours, agg_baseline["avg_time_P3"], agg_coop["avg_time_P3"], agg_ml["avg_time_P3"], f"{scope_title}: Avg Completion Time (Urgent Priority) - Rolling 1h Window", "Steps", f"{scope}_avg_time_urgent.png", scope, detected_peaks)
 
     # Priority-specific counts
     plot_metric(time_axis_hours, agg_baseline["count_P1"], agg_coop["count_P1"], agg_ml["count_P1"], f"{scope_title}: Normal Priority Orders Completed", "Orders", f"{scope}_count_normal.png", scope, detected_peaks)
@@ -314,6 +442,27 @@ def run_benchmark(seeds: List[int], steps: int, scope_title: str, scope: str):
     agg_b = aggregate_runs(runs_baseline)
     agg_c = aggregate_runs(runs_coop)
     agg_m = aggregate_runs(runs_ml)
+    
+    # Compute rolling window averages for completion times (1 hour window = 60 steps)
+    rolling_b = compute_rolling_avg_time(runs_baseline, window_steps=60)
+    rolling_c = compute_rolling_avg_time(runs_coop, window_steps=60)
+    rolling_m = compute_rolling_avg_time(runs_ml, window_steps=60)
+    
+    # Replace cumulative averages with rolling window averages
+    agg_b["avg_time_all"] = rolling_b["avg_time_all"]
+    agg_b["avg_time_P1"] = rolling_b["avg_time_P1"]
+    agg_b["avg_time_P2"] = rolling_b["avg_time_P2"]
+    agg_b["avg_time_P3"] = rolling_b["avg_time_P3"]
+    
+    agg_c["avg_time_all"] = rolling_c["avg_time_all"]
+    agg_c["avg_time_P1"] = rolling_c["avg_time_P1"]
+    agg_c["avg_time_P2"] = rolling_c["avg_time_P2"]
+    agg_c["avg_time_P3"] = rolling_c["avg_time_P3"]
+    
+    agg_m["avg_time_all"] = rolling_m["avg_time_all"]
+    agg_m["avg_time_P1"] = rolling_m["avg_time_P1"]
+    agg_m["avg_time_P2"] = rolling_m["avg_time_P2"]
+    agg_m["avg_time_P3"] = rolling_m["avg_time_P3"]
 
     # Prepare time axis in hours
     time_axis_hours = np.arange(steps) / 60.0
