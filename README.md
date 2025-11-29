@@ -1,144 +1,50 @@
-# Starter Code - README
+# Problem 3: Warehouse Robot Coordination 🤖
 
-## Quick Start
-
-Each problem has its own directory with starter code to reduce setup friction:
-
-### Problem 1: Traffic Light Optimization 🚦
+## Env Setup 
+An `environment.yml` is provided with a full breakdown of required packages. This can be installed using Mamba or Conda:  
 ```bash
-cd starter_code/problem1_traffic
-python traffic_simulator.py
+conda env create -f environment.yml #conda 
+mamba env create -f environment.yml #mamba
 ```
-
-**What's provided:**
-### Problem 3: Warehouse Robot Coordination 🤖
-```bash
-cd starter_code/problem3_warehouse
-python warehouse_simulator.py
-```
-
-**What's provided:**
-- `warehouse_simulator.py` - Robot fleet simulation
-- Grid-based warehouse environment
-- Basic robot and order data structures
-- Greedy task assignment baseline
-
-**What you need to implement:**
-- A* pathfinding algorithm
-- Multi-robot collision avoidance
-- Optimal task assignment
-- Demand forecasting ML model
-- Visualization
-
----
-
-## Installation
-
-All problems use standard Python libraries. Install dependencies:
-
+If neither Mamba nor Conda is available, a `requirements.txt` is also provided which can be installed via *pip*:  
 ```bash
 pip install -r requirements.txt
 ```
 
-**Core dependencies:**
-- numpy, pandas, scikit-learn (ML)
-- scipy, cvxpy, or ortools (optimization)
-- matplotlib, plotly, or dash (visualization)
+## Project Files
+ - `synthetic_data.py ` : the provided data generation file
+ - `benchmark.py ` : a file used to average all experiments + plot results
+ - `config.py ` : used to store a config used by all benchmarks
+ - `visualise_grid.py ` : used to visualise a static warehouse image of our layout
+ - `warehouse_simulator.py ` : the baseline (Greedy match + A*)
+ - `warehouse_simulator_coop_astar.py ` : the improved baseline (Hungarian matching + cooperative planning)
+ - `warehouse_simulator_ML.py ` : the machine learning improvement using temporal and spatial prediction. 
 
-**Optional:**
-- requests (for API calls in Problem 2)
-- streamlit (for interactive dashboards)
-- pygame (for fancy visualizations)
+## How to Run
+### Benchmark all implementations
+To run all benchmarks for the daily, weekly and monthly setting, you can make use of the `benchmark.py` file which will run all of the implemented benchmarks, average them over 10 seeds, and plot all the corresponding results with error bars shaded (figs are saved in `/figs`). 
+```bash
+python benchmark.py
+```
 
----
+### Run individual implementations
+Each implementation can be run on its own, using the commands:
+```bash
+python warehouse_simulator.py #runs the basic benchmark 
+python warehouse_simulator_coop_astar.py #runs the improved benchmark 
+python warehouse_simulator_ML.py #runs the ML benchmark 
+```
+### Customising runs
+For both of the above configurations, the problem setting parameters can be modified in the `config.py` file, here you can specify things like warehouse size, num robots, etc. All benchmark files will use this config. 
 
-## Tips
+## Packages / Libraries used:
+ - `python>=3.12`
+ - `matplotlib==3.10.6`
+ - `numpy==2.3.5`
+ - `pandas==2.3.3`
+ - `scikit-learn==1.7.2`
+ - `scipy==1.16.3`
+ - `PyQt6==6.9.1`
 
-### Use the Starter Code or Not?
-- **Use it if**: You want to save time on boilerplate
-- **Don't use it if**: You prefer your own architecture
 
-The starter code is meant to help, not constrain. Feel free to:
-- Modify it heavily
-- Cherry-pick useful parts
-- Ignore it completely and start fresh
 
-### What NOT to Waste Time On
-- Perfect OOP design (functional is fine)
-- Extensive unit tests (working demo > test coverage)
-- Type hints everywhere (helpful but not required)
-- Documentation beyond basic README
-
-### What TO Focus On
-- **Working demo** that shows your solution
-- **Clear thinking** in your approach
-- **Good results** on the problem metrics
-- **Explainability** of your methods
-
----
-
-## Common Pitfalls
-
-### Problem 1 (Traffic)
-- ❌ Spending too long on realistic physics simulation
-- ✅ Simple grid-based movement is fine
-- ❌ Over-complex ML models
-- ✅ Simple regression/classification works
-
-### Problem 2 (Fantasy)
-- ❌ Getting stuck on API rate limits
-- ✅ Use synthetic data if APIs are painful
-- ❌ Perfect predictions
-- ✅ Beat baselines, show improvement
-
-### Problem 3 (Warehouse)
-- ❌ Implementing fancy RL from scratch
-- ✅ A* + good task assignment gets you far
-- ❌ Complex 3D visualization
-- ✅ Simple 2D grid is sufficient
-
----
-
-## Example Workflow
-
-**Phase 1 (3 hours):**
-1. Choose your problem
-2. Run starter code, understand structure
-3. Sketch your approach on paper
-4. Set up development environment
-
-**Phase 2 (6 hours):**
-1. Implement ML component (3 hours)
-2. Implement optimization component (3 hours)
-3. Basic integration test
-
-**Phase 3 (6 hours):**
-1. Integration and debugging (2 hours)
-2. Visualization (2 hours)
-3. Benchmarking and metrics (1 hour)
-4. Polish demo (1 hour)
-
-**Phase 4 (2 hours):**
-1. Final testing
-2. Prepare presentation
-3. Practice demo
-
----
-
-## Need Help?
-
-### Debugging
-- Use print statements liberally
-- Visualize intermediate steps
-- Start simple, add complexity gradually
-
-### Resources
-- Documentation is your friend (not copying code)
-- Stack Overflow for specific errors
-- ChatGPT for boilerplate (but understand it!)
-
----
-
-## Good Luck! 🚀
-
-Remember: We want to see how you think and solve problems, not perfect solutions. Have fun with it!

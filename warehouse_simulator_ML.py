@@ -16,10 +16,11 @@ from synthetic_data import SyntheticDataGenerator
 
 from scipy.optimize import linear_sum_assignment
 from sklearn.ensemble import RandomForestRegressor
+import config
 
-CHARGE_RATE = 5.0
-DRAIN_RATE = 0.4
-SEED = 42
+CHARGE_RATE = config.CHARGE_RATE
+DRAIN_RATE = config.DRAIN_RATE
+SEED = config.SEED
 
 class CellType(Enum):
     EMPTY = 0
@@ -488,16 +489,16 @@ class WarehouseSimulator:
         
         #One day for now with peaks at 9 and 5 
         df = gen.generate_poisson_events(
-            n_days=7, 
-            base_rate=8,  #base orders per hour         
-            peak_hours=[8, 17],
-            peak_multiplier=2.0,    #how much busier are we at peak,
-            seed=SEED
+            n_days=config.N_DAYS, 
+            base_rate=config.BASE_RATE,  #base orders per hour         
+            peak_hours=config.PEAK_HOURS,
+            peak_multiplier=config.PEAK_MULTIPLIER,    #how much busier are we at peak,
+            seed=config.SEED
         )
         
         arrival_times = []
     
-        STEPS_PER_HOUR = 60 # granularity of simulation steps per hour (how many env steps per hour in the dataset)
+        STEPS_PER_HOUR = config.STEPS_PER_HOUR # granularity of simulation steps per hour (how many env steps per hour in the dataset)
         #reminder : 1 dt = 1 minute in sim so 60 steps per hour
 
         for hour, row in df.iterrows():
@@ -807,15 +808,15 @@ class WarehouseSimulator:
     
 def main():
     """Example usage"""
-    np.random.seed(SEED)  # ensure reproducible runs
+    np.random.seed(config.SEED)  # ensure reproducible runs
     print("Warehouse Robot Fleet Coordination - Starter Code")
     print("=" * 50)
     
     # Create warehouse
-    warehouse = Warehouse(width=30, height=30)
+    warehouse = Warehouse(width=config.WAREHOUSE_WIDTH, height=config.WAREHOUSE_HEIGHT)
     
     # Add robots
-    for i in range(10):
+    for i in range(config.NUM_ROBOTS):
         warehouse.add_robot(Position(i, 0))
     
     print(f"Created warehouse: {warehouse.width}x{warehouse.height}")
@@ -826,11 +827,12 @@ def main():
     
     # Run simulation
     print("\nRunning simulation...")
-    # 24 hours * 60 steps/hour = 1440 steps
-    for step in range(24 * 60 * 7):
+    # Calculate total steps: N_DAYS * 24 hours * STEPS_PER_HOUR
+    total_steps = config.N_DAYS * 24 * config.STEPS_PER_HOUR
+    for step in range(total_steps):
         sim.step(dt=1.0)
         
-        if step % 20 == 0:
+        if step % config.PRINT_INTERVAL == 0:
             metrics = sim.get_metrics()
             print(f"Step {step}: {metrics}")
 
