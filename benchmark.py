@@ -75,7 +75,8 @@ def run_simulation_baseline(steps: int, seed: int) -> List[Dict]:
 
 def run_simulation_coop(steps: int, seed: int) -> List[Dict]:
     np.random.seed(seed)
-    ws_coop.SEED = seed
+    ws_coop.SEED = seed  # ensure SyntheticDataGenerator and any module-level uses match
+    config.SEED = seed
 
     warehouse = WarehouseCoop(width=WAREHOUSE_W, height=WAREHOUSE_H)
     for i in range(NUM_ROBOTS):
@@ -96,7 +97,8 @@ def run_simulation_coop(steps: int, seed: int) -> List[Dict]:
 
 def run_simulation_ml(steps: int, seed: int) -> List[Dict]:
     np.random.seed(seed)
-    ws_ml.SEED = seed
+    ws_ml.SEED = seed  # ensure SyntheticDataGenerator and any module-level uses match
+    config.SEED = seed
 
     warehouse = WarehouseML(width=WAREHOUSE_W, height=WAREHOUSE_H)
     for i in range(NUM_ROBOTS):

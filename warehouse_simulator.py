@@ -384,7 +384,7 @@ class WarehouseSimulator:
                 end_time = (hour + 1) * STEPS_PER_HOUR
                 
                 # Generate random times within this hour
-                times = np.random.uniform(start_time, end_time, count)
+                times = schedule_rng.uniform(start_time, end_time, count)
                 arrival_times.extend(times)
                 
         return sorted(arrival_times) #sort them so we process morn to night 

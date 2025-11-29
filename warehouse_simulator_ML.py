@@ -268,6 +268,10 @@ class PathPlanner:
             all_paths[rob.id] = path # still assigning the robot path 
 
             if path: 
+                # Reserve all positions along the path at their respective times
+                for t, pos in enumerate(path, start=1):  # start at time 1 (robot moves at t=1)
+                    reserved_states.add((pos.x, pos.y, t))
+                
                 end = path[-1]
                 final_time = len(path) #time robot arrives at goal
                 for waiting_time in range(1, 3): # reserve the goal for 2 seconds after arrival to prevent crash 
@@ -508,7 +512,7 @@ class WarehouseSimulator:
                 end_time = (hour + 1) * STEPS_PER_HOUR
                 
                 # Generate random times within this hour
-                times = np.random.uniform(start_time, end_time, count)
+                times = schedule_rng.uniform(start_time, end_time, count)
                 arrival_times.extend(times)
                 
         return sorted(arrival_times) #sort them so we process morn to night 
