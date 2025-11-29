@@ -586,27 +586,20 @@ class WarehouseSimulator:
             # have a path and either moving or need to move 
             if robot.path and robot.state in ["moving", "idle"]:
                 robot.state = "moving"
-                next_pos = robot.path[0]
-                
-                prev_pos = robot.position
+                next_pos = robot.path[0] 
+
+                if next_pos.x == robot.position.x and next_pos.y == robot.position.y:
+                    robot.wait_steps += 1 #waiting in same cell robot didnt move this turn 
+                else:
+                    robot.move_steps += 1 #robot moved this turn
+    
                 if robot.position in robot_positions:
                     robot_positions.remove(robot.position) #free up current cell so dont conflict a*
-                
-                # Check for collision before moving
-                if next_pos in robot_positions:
-                    robot_positions.add(robot.position)  # stay in current position
-                    robot.wait_steps += 1
-                    return
                 
                 robot.position = next_pos 
                 robot_positions.add(robot.position)
                 
-                robot.path.pop(0) #Remove next step from the path to move
-                
-                if next_pos.x == prev_pos.x and next_pos.y == prev_pos.y:
-                    robot.wait_steps += 1 #waiting in same cell robot didnt move this turn 
-                else:
-                    robot.move_steps += 1 #robot moved this turn 
+                robot.path.pop(0) #Remove next step from the path to move 
 
             if robot.target is not None and robot.position == robot.target: #Arrived at target 
                 
@@ -625,9 +618,7 @@ class WarehouseSimulator:
             if robot.state == "picking": #on shelf picking order 
                 robot.carrying_item = True
                 if self.dock_locations:
-                    # Find nearest dock
-                    closest_dock = min(self.dock_locations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
-                    robot.target = closest_dock 
+                    robot.target = self.dock_locations[0] #Set target to dock 
 
 
             elif robot.state == "delivering": #on dock delivering 
