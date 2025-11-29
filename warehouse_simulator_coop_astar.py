@@ -402,6 +402,9 @@ class WarehouseSimulator:
     
         self.order_schedule = self._generate_daily_schedule()
         self.next_order_index = 0
+        
+        
+        self._initialize_hotspots()
 
     #Daily schedule generated using the given synthetic data generator
     def _generate_daily_schedule(self):
@@ -435,7 +438,23 @@ class WarehouseSimulator:
                 
         return sorted(arrival_times) #sort them so we process morn to night 
     
+    def _initialize_hotspots(self, hotspot_ratio: float = 0.2, hotspot_weight: float = 5.0):
+        shelves = np.argwhere(self.warehouse.grid == CellType.SHELF.value)
+        n_shelves = len(shelves)
+        
+        # Randomly select hotspot shelves
+        n_hotspots = max(1, int(n_shelves * hotspot_ratio))
+        hotspot_indices = np.random.choice(n_shelves, size=n_hotspots, replace=False)
 
+        self.shelf_weights = np.ones(n_shelves)
+        self.shelf_weights[hotspot_indices] = hotspot_weight #weights to the hotspot shelves
+
+        self.hotspot_shelves = set()
+        for idx in hotspot_indices:
+            y, x = shelves[idx]
+            self.hotspot_shelves.add(Position(x, y))
+    
+        self.shelf_probabilities = self.shelf_weights / self.shelf_weights.sum() #put in range 0-1
     def find_cell_type(self, cell_type: CellType) -> List[Position]:
         positions = []
         for y in range(self.warehouse.height):
@@ -543,7 +562,8 @@ class WarehouseSimulator:
         """Generate a random order"""
         shelves = np.argwhere(self.warehouse.grid == CellType.SHELF.value)
         if len(shelves) > 0:
-            shelf = shelves[np.random.randint(len(shelves))]
+            shelf_idx = np.random.choice(len(shelves), p=self.shelf_probabilities)
+            shelf = shelves[shelf_idx]
             order = Order(
                 id=len(self.warehouse.orders) + len(self.warehouse.completed_orders),
                 item_location=Position(shelf[1], shelf[0]),
