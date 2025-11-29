@@ -244,7 +244,8 @@ class PathPlanner:
     @staticmethod
     def conflict_based_search(warehouse: Warehouse,
                              robots: List[Robot],
-                             goals: List[Position]) -> Dict[int, List[Position]]:
+                             goals: List[Position],
+                             existing_reservations: Set[Tuple[int, int, int]] = None) -> Dict[int, List[Position]]:
         """
         Multi-robot pathfinding with collision avoidance
         """
@@ -257,6 +258,10 @@ class PathPlanner:
 
         all_paths = {} #Store path map robot -> path 
         reserved_states = set() #remember to store x, y, time now 
+        
+        # Add existing reservations (from robots with paths that aren't being replanned)
+        if existing_reservations:
+            reserved_states.update(existing_reservations)
 
         # new - reserve pos at t = 0 to prevent conflicts 
         for r in robots:
@@ -670,7 +675,13 @@ class WarehouseSimulator:
                     goals_to_plan.append(robot.target)
 
         if robots_to_plan:
-            panned_paths = self.path_planner.conflict_based_search(self.warehouse, robots_to_plan, goals_to_plan)
+            existing_path_reservations = set()
+            for robot in self.warehouse.robots:
+                if robot.path and robot.id not in [r.id for r in robots_to_plan]:
+                    for t, pos in enumerate(robot.path, start=1):
+                        existing_path_reservations.add((pos.x, pos.y, t)) #reserve path positions for other bots, no overlap ever
+            
+            panned_paths = self.path_planner.conflict_based_search(self.warehouse, robots_to_plan, goals_to_plan, existing_path_reservations)
 
             for rob in robots_to_plan:
                 if rob.id in panned_paths:
