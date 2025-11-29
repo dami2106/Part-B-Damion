@@ -618,7 +618,9 @@ class WarehouseSimulator:
             if robot.state == "picking": #on shelf picking order 
                 robot.carrying_item = True
                 if self.dock_locations:
-                    robot.target = self.dock_locations[0] #Set target to dock 
+                    # Find nearest dock
+                    closest_dock = min(self.dock_locations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
+                    robot.target = closest_dock 
 
 
             elif robot.state == "delivering": #on dock delivering 

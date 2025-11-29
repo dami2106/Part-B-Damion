@@ -55,7 +55,7 @@ def run_simulation_baseline(steps: int, seed: int) -> List[Dict]:
     # Ensure same randomness as schedule generation
     np.random.seed(seed)
     ws_baseline.SEED = seed  # ensure SyntheticDataGenerator and any module-level uses match
-
+    config.SEED = seed
     warehouse = Warehouse(width=WAREHOUSE_W, height=WAREHOUSE_H)
     for i in range(NUM_ROBOTS):
         warehouse.add_robot(PositionBaseline(i, 0))
@@ -331,7 +331,7 @@ def main():
 
     # Month benchmark
     print("Running month benchmark...")
-    run_benchmark(seeds=seeds, steps=STEPS_MONTH, scope_title="Month (30d)", scope="month")
+    # run_benchmark(seeds=seeds, steps=STEPS_MONTH, scope_title="Month (30d)", scope="month")
 
     print("\nAll figures saved to figs/ directory")
 

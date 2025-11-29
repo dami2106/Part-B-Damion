@@ -384,7 +384,7 @@ class OrderPredictor:
         curr_hour_of_day = current_time_hours % 24
         curr_day_week = int(current_time_hours // 24) % 7 
 
-        print("Debug: ", current_time, current_time_hours, curr_hour_of_week, curr_hour_of_day, curr_day_week)
+        # print("Debug: ", current_time, current_time_hours, curr_hour_of_week, curr_hour_of_day, curr_day_week)
         #Might have to add cycles here TODO add if perf bad 
         #https://towardsdatascience.com/how-to-handle-cyclical-data-in-machine-learning-3e0336f7f97c/
         
@@ -420,9 +420,9 @@ class OrderPredictor:
         if len(X) > 0:
             self.time_model.fit(X, y)
             self.trained_time_model = True
-            print("OrderPredictor: Updated time model with", len(X), "samples.")
-            print("Feature importances:", self.time_model.feature_importances_)
-            print("model error", np.std(y - self.time_model.predict(X)))
+            # print("OrderPredictor: Updated time model with", len(X), "samples.")
+            # print("Feature importances:", self.time_model.feature_importances_)
+            # print("model error", np.std(y - self.time_model.predict(X)))
     
 
         #TODO add data split eval etc. 
@@ -441,8 +441,8 @@ class OrderPredictor:
         to_predict = np.array([[next_hour_of_day, next_day_week, curr_hour_count]])
         predicted_count = self.time_model.predict(to_predict)[0]
 
-        print("Given current time:", current_time, "and curr hour count:", curr_hour_count, 
-              "predicted next hour count:", predicted_count)
+        # print("Given current time:", current_time, "and curr hour count:", curr_hour_count, 
+        #       "predicted next hour count:", predicted_count)
 
 
         return max(0, int(predicted_count)) #model sometimes gave negative values when not trained well
@@ -544,7 +544,7 @@ class WarehouseSimulator:
         idle_robots = [r for r in self.warehouse.robots if r.state == "idle"]
 
         if self.predicted_next_hour_orders >= high_load_thresh:
-            print("Detected high load")
+            # print("Detected high load")
 
 
             warehouse_middle = self.warehouse.width // 2, self.warehouse.height // 2
@@ -589,8 +589,8 @@ class WarehouseSimulator:
 
             self.predicted_next_hour_orders = self.order_pred.predict_next_hour(self.warehouse.time, self.current_orders_for_hour)
 
-            print("Time:", self.warehouse.time, "Ended hour with ", self.current_orders_for_hour, 
-                  "orders. Predicted next hour orders:", self.predicted_next_hour_orders)
+            # print("Time:", self.warehouse.time, "Ended hour with ", self.current_orders_for_hour, 
+            #       "orders. Predicted next hour orders:", self.predicted_next_hour_orders)
             
             #Update robots movement TODO
             self.ml_robot_movement()
@@ -742,7 +742,9 @@ class WarehouseSimulator:
             if robot.state == "picking": #on shelf picking order 
                 robot.carrying_item = True
                 if self.dock_locations:
-                    robot.target = self.dock_locations[0] #Set target to dock 
+                    # Find nearest dock
+                    closest_dock = min(self.dock_locations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
+                    robot.target = closest_dock 
 
 
             elif robot.state == "delivering": #on dock delivering 

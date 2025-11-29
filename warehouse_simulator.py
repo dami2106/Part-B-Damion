@@ -443,7 +443,9 @@ class WarehouseSimulator:
             if robot.state == "idle" and robot.battery <= robot.battery_thresh:
                 robots_need_charge.append(robot)    
                 if charging_stations:
-                    robot.target = charging_stations[0] #go to first charging station 
+                    # Find nearest charger
+                    closest_station = min(charging_stations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
+                    robot.target = closest_station
                     robot.state = "moving"
 
         if robots_need_charge:
@@ -542,9 +544,10 @@ class WarehouseSimulator:
         elif robot.state == "picking":
             robot.carrying_item = True
             
-            
+            # Find nearest dock
             if self.dock_locations:
-                robot.target = self.dock_locations[0]
+                closest_dock = min(self.dock_locations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
+                robot.target = closest_dock
         
             robot.path = PathPlanner.a_star(self.warehouse, robot.position, robot.target)
             if robot.path:
