@@ -381,9 +381,22 @@ class OrderPredictor:
         self.trained_time_model = False
         # self.last_update_time = 0
 
+        self.shelf_visit_freq = {} #want ti store pos -> visit count (maybe weighted) 
+        self.decay_amnt = 0.95 # equiv to 5% decay per call (60 step)
+
         self.history = []
         self.history_num_samples = history_num_samples
     
+    def update_shelf_visit_freq(self, pos):
+        dict_key = (pos.x, pos.y)
+        self.shelf_visit_freq[dict_key] = float(self.shelf_visit_freq.get(dict_key, 0) + 1)
+
+    def apply_decay_to_freq(self):
+        for shelf_pos in list(self.shelf_visit_freq.keys()):
+            self.shelf_visit_freq[shelf_pos] *= self.decay_amnt
+            if self.shelf_visit_freq[shelf_pos] < 0.01:
+                del self.shelf_visit_freq[shelf_pos] #No point decaying one so small justremove 
+
     def update_hourly(self, current_time, order_count): #can call every hour to update
         # Convert minutes to hours 1 dt = 1 minute
         current_time_hours = current_time / 60.0
@@ -459,10 +472,13 @@ class OrderPredictor:
     
     def predict_hotspots(self, current_time: float) -> List[Position]:
         """Predict which warehouse areas will be busy"""
-        # TODO: Predict where robots should pre-position
-        # Based on historical patterns
-        return []
+        if not self.shelf_visit_freq:
+            return [] #no data yet
+        
+        shelves_sorted = sorted(self.shelf_visit_freq.keys(), key=lambda x: self.shelf_visit_freq[x], reverse=True)
+        top_shelves = shelves_sorted[:5] #top 5 most visited shelves
 
+        return [Position(x, y) for (x, y) in top_shelves]
 
 class WarehouseSimulator:
     """Main simulation controller"""
@@ -555,23 +571,47 @@ class WarehouseSimulator:
         if self.predicted_next_hour_orders >= high_load_thresh:
             # print("Detected high load")
 
+            hotspots = self.order_pred.predict_hotspots(self.warehouse.time)
+            if hotspots:
+                for i, robot in enumerate(idle_robots):
+                    robot.battery_thresh = 30.0 #reset since we will be moving robots
+                    if robot.battery > robot.battery_thresh + 10: #have enough battery to move
+                        curr_hotspot = hotspots[i % len(hotspots)]
 
-            warehouse_middle = self.warehouse.width // 2, self.warehouse.height // 2
+                        nearby_cell_hotspot = []
+                        for dx in range(-3, 4): #scan around the hotspot to find an empty cell for us 
+                            for dy in range(-3, 4):
+                                pos_to_go = Position(curr_hotspot.x + dx, curr_hotspot.y + dy)
+                                if self.warehouse.is_valid_position(pos_to_go):
+                                    nearby_cell_hotspot.append(pos_to_go)
 
-            for robot in idle_robots:
-                robot.battery_thresh = 30.0  #reset to normal threshold
-                if robot.battery > robot.battery_thresh + 10: #have enough battery to move
-                    x_area_possible = np.random.randint(-5, 5)
-                    y_area_possible = np.random.randint(-5, 5)
+                        if nearby_cell_hotspot:
+                            #find the closest empty cell to the hotspot
+                            closest_cell = min(nearby_cell_hotspot, key=lambda pos: self.path_planner.manhattan(curr_hotspot, pos))
+                            robot.target = closest_cell
+                            robot.state = "moving"
 
-                    robot_target = Position(
-                        min(self.warehouse.width -1, max(0, warehouse_middle[0] + x_area_possible)),
-                        min(self.warehouse.height -1, max(0, warehouse_middle[1] + y_area_possible))
-                    )
 
-                    if self.warehouse.is_valid_position(robot_target):
-                        robot.target = robot_target
-                        robot.state = "moving"
+            else: #fall back to old middle warehouse strategy
+                existing_path_reservations = set()
+
+
+                warehouse_middle = self.warehouse.width // 2, self.warehouse.height // 2
+
+                for robot in idle_robots:
+                    robot.battery_thresh = 30.0  #reset to normal threshold
+                    if robot.battery > robot.battery_thresh + 10: #have enough battery to move
+                        x_area_possible = np.random.randint(-5, 5)
+                        y_area_possible = np.random.randint(-5, 5)
+
+                        robot_target = Position(
+                            min(self.warehouse.width -1, max(0, warehouse_middle[0] + x_area_possible)),
+                            min(self.warehouse.height -1, max(0, warehouse_middle[1] + y_area_possible))
+                        )
+
+                        if self.warehouse.is_valid_position(robot_target):
+                            robot.target = robot_target
+                            robot.state = "moving"
 
         else:
             #not many orders can charge more 
@@ -597,11 +637,13 @@ class WarehouseSimulator:
             self.order_pred.train()
 
             self.predicted_next_hour_orders = self.order_pred.predict_next_hour(self.warehouse.time, self.current_orders_for_hour)
+            
+            self.order_pred.apply_decay_to_freq() #decay our freqyency track every hour
 
             # print("Time:", self.warehouse.time, "Ended hour with ", self.current_orders_for_hour, 
             #       "orders. Predicted next hour orders:", self.predicted_next_hour_orders)
             
-            #Update robots movement TODO
+            #Update robots movement (no planning done here just target assign)
             self.ml_robot_movement()
 
             self.last_time_checked = self.warehouse.time
@@ -710,6 +752,8 @@ class WarehouseSimulator:
                 priority=np.random.choice([1, 2, 3], p=[0.7, 0.2, 0.1])
             )
             self.warehouse.add_order(order)
+
+            self.order_pred.update_shelf_visit_freq(order.item_location) #update our freqyency track
 
     def _move_robot(self, robot: Robot, robot_positions: Set[Position], dt: float):
             """Move robot one step along its path"""
