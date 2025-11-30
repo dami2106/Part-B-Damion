@@ -8,7 +8,7 @@ from src.warehouse_simulator_ML import Warehouse as WarehouseML, WarehouseSimula
 import src.warehouse_simulator as ws_baseline
 import src.warehouse_simulator_ML as ws_ml
 import src.config as config
-
+import random
 
 # Benchmark configuration
 NUM_ROBOTS = config.NUM_ROBOTS
@@ -49,10 +49,10 @@ METRIC_KEYS = [
 ]
 
 def run_simulation_baseline(steps: int, seed: int) -> List[Dict]:
-    # Ensure same randomness as schedule generation
     np.random.seed(seed)
-    ws_baseline.SEED = seed  # ensure SyntheticDataGenerator and any module-level uses match
+    ws_ml.SEED = seed  # ensure SyntheticDataGenerator and any module-level uses match
     config.SEED = seed
+    random.seed(seed)
     warehouse = Warehouse(width=WAREHOUSE_W, height=WAREHOUSE_H)
     for i in range(NUM_ROBOTS):
         warehouse.add_robot(PositionBaseline(i, 0))
@@ -74,7 +74,7 @@ def run_simulation_ml(steps: int, seed: int) -> List[Dict]:
     np.random.seed(seed)
     ws_ml.SEED = seed  # ensure SyntheticDataGenerator and any module-level uses match
     config.SEED = seed
-
+    random.seed(seed)
     warehouse = WarehouseML(width=WAREHOUSE_W, height=WAREHOUSE_H)
     for i in range(NUM_ROBOTS):
         warehouse.add_robot(PositionML(i, 0))
