@@ -2,8 +2,7 @@
 Warehouse Robot Fleet Coordination - Starter Code
 Problem 3: Multi-Robot Task Assignment and Pathfinding
 
-This is a skeleton to get you started quickly.
-Feel free to modify, extend, or completely rewrite!
+Improved ML + optimised implementation
 """
 
 import pandas as pd
@@ -938,6 +937,7 @@ class WarehouseSimulator:
 def main():
     """Example usage"""
     np.random.seed(config.SEED)  # ensure reproducible runs
+    random.seed(config.SEED)
     print("Warehouse Robot Fleet Coordination - Starter Code")
     print("=" * 50)
     
@@ -974,13 +974,6 @@ def main():
     # for pos in path:
     #     print(f"({pos.x}, {pos.y})", end=" -> ")
     
-    print("\nNext steps:")
-    print("1. Implement A* pathfinding")
-    print("2. Implement multi-robot coordination (CBS)")
-    print("3. Implement optimal task assignment")
-    print("4. Add ML for demand prediction")
-    print("5. Create visualization")
-    print("6. Benchmark vs baseline")
 
 
 if __name__ == "__main__":

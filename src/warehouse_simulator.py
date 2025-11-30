@@ -2,8 +2,7 @@
 Warehouse Robot Fleet Coordination - Starter Code
 Problem 3: Multi-Robot Task Assignment and Pathfinding
 
-This is a skeleton to get you started quickly.
-Feel free to modify, extend, or completely rewrite!
+Baseline Implementation
 """
 
 import numpy as np
@@ -12,7 +11,7 @@ from typing import List, Tuple, Set, Dict, Optional
 import heapq
 from enum import Enum
 from src.synthetic_data import SyntheticDataGenerator   
-
+import random
 from scipy.optimize import linear_sum_assignment
 import src.config as config
 
@@ -614,6 +613,7 @@ class WarehouseSimulator:
 def main():
     """Example usage"""
     np.random.seed(config.SEED)  # ensure reproducible runs
+    random.seed(config.SEED)
     print("Warehouse Robot Fleet Coordination - Starter Code")
     print("=" * 50)
     
@@ -649,14 +649,6 @@ def main():
     # print(f"Path from {start} to {goal}:")
     # for pos in path:
     #     print(f"({pos.x}, {pos.y})", end=" -> ")
-    
-    print("\nNext steps:")
-    print("1. Implement A* pathfinding")
-    print("2. Implement multi-robot coordination (CBS)")
-    print("3. Implement optimal task assignment")
-    print("4. Add ML for demand prediction")
-    print("5. Create visualization")
-    print("6. Benchmark vs baseline")
 
 
 if __name__ == "__main__":
