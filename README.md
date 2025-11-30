@@ -36,6 +36,7 @@ For both of the above configurations, the problem setting parameters can be modi
  - Shelves are placed in a grid like pattern with some extra shelves added to add obstacles and congestion. 
  - Certain shelves are favoured depending on our sampling seed (they are not randomly sampled when creating an order). This is static and doesnt change. This means certain shelves are used more than others
  - Order priority is assigned with priorities : 70% for normal, 20% for high, and 10% for urgent.
+ - We train our models in the online setting (as they are acting and delivering) due to the nature of these robot warehouses in real life. They operate in such a dynamic and changing space that, to me, training on an offline dataset seems limiting. While more expensive it does allow us to adapt. 
 
 
 ## The Approaches Used 
