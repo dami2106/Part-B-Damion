@@ -78,42 +78,56 @@ class Warehouse:
         self.orders: List[Order] = []
         self.completed_orders: List[Order] = []
         self.time = 0.0
-        self.total_collisions = 0  #Added this to see how many times we wait for block to be open 
+        self.total_collisions = 0  #See how many times we wait for block to be open 
         
         # Initialize warehouse layout
         self._create_layout()
         
     def _create_layout(self):
+        mid_y = self.height // 2
+        mid_x = self.width // 2
         
+        center_clear_radius = 1 
         for i in range(2, self.height - 2, 3):
             for j in range(2, self.width - 2, 3):
+                if abs(i - mid_y) <= center_clear_radius and abs(j - mid_x) <= center_clear_radius:
+                    continue
                 self.grid[i, j] = CellType.SHELF.value # Place shelves in a grid pattern
          
-        #Exttra shelves to increase density (hopefully more clashes makes it harder)
+        # Extra shelves for density
         for i in [3, 6, 9]:
             for j in [4, 7, 10]:
+                # Skip if in center area becase of batteries
+                if abs(i - mid_y) <= center_clear_radius and abs(j - mid_x) <= center_clear_radius:
+                    continue
                 if self.grid[i, j] == CellType.EMPTY.value:
                     self.grid[i, j] = CellType.SHELF.value
-        
-        # Loading docks: top middle, right middle, bottom middle, left middle
+
         dock_positions = [
-            (0, self.width // 2),              # Top middle
-            (self.height // 2, self.width - 1), # Right middle
-            (self.height - 1, self.width // 2), # Bottom middle
-            (self.height // 2, 0),              # Left middle
+            (1, mid_x),
+            (mid_y, self.width - 2),
+            (self.height - 2, mid_x),
+            (mid_y, 1), #Docks on the perimeter cetnres
         ]
         for y, x in dock_positions:
             self.grid[y, x] = CellType.LOADING_DOCK.value
         
-        # Charging stations in all 4 corners
+        #Chargers in the middle 
         charging_positions = [
-            (0, 0),                          # Top-left corner
-            (0, self.width - 1),             # Top-right corner
-            (self.height - 1, 0),            # Bottom-left corner
-            (self.height - 1, self.width - 1), # Bottom-right corner
+            (mid_y - 1, mid_x - 1), (mid_y - 1, mid_x),
+            (mid_y, mid_x - 1), (mid_y, mid_x),
         ]
+        
         for y, x in charging_positions:
             self.grid[y, x] = CellType.CHARGING_STATION.value
+        
+        for y, x in charging_positions:
+            for dy, dx in [(0, 1), (0, -1), (1, 0), (-1, 0)]: 
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < self.height and 0 <= nx < self.width:
+                    if (self.grid[ny, nx] != CellType.LOADING_DOCK.value and 
+                        self.grid[ny, nx] != CellType.CHARGING_STATION.value):
+                        self.grid[ny, nx] = CellType.EMPTY.value #clear adjacent cells for access to charger
         
     def add_robot(self, position: Position):
         """Add a robot to the warehouse"""
@@ -158,7 +172,7 @@ class PathPlanner:
     def a_star(warehouse: Warehouse,  #map of warehouse 2d arr 
                start: Position,  #start pos of calling robot 
                goal: Position,   #goal pos of calling robot 
-               reserved_positions: Set[Position] = None #can populate this list with reserved grid pos to avoid collisions
+               reserved_positions: Set[Position] = None
                ) -> List[Position]:
         
         if reserved_positions is None:
@@ -244,21 +258,28 @@ class TaskAssigner:
         """
         assignment = {}
 
+        #avail robots that arent already working on an order
         available_robots = [r for r in warehouse.robots if r.state == "idle" and r.battery > r.battery_thresh]
-        pending_orders = [o for o in warehouse.orders if o.completion_time is None]
+
+        #Find orders that are assigned so robots dont get race conditins
+        active_order_ids = {r.order_id for r in warehouse.robots if r.order_id is not None}
         
-        #sort orders by priority (higher first)
+        pending_orders = [
+            o for o in warehouse.orders 
+            if o.completion_time is None and o.id not in active_order_ids
+        ] #orders that arent completed and not already assigned to a robot
+
+        #Sort by priority, naive way to get urgent orders first
         pending_orders.sort(key=lambda o: o.priority, reverse=True)
 
 
-        # Simple greedy: for each order, find closest robot
         for order in pending_orders:
             if not available_robots:
                 break
-            
-            # Find closest robot
+
             min_dist = float('inf')
             best_robot = None
+            
             for robot in available_robots:
                 dist = abs(robot.position.x - order.item_location.x) + \
                        abs(robot.position.y - order.item_location.y)
@@ -280,39 +301,7 @@ class TaskAssigner:
         Returns: dict of robot_id -> order_id
         """
 
-        idle_robots = [r for r in warehouse.robots if r.state == "idle" and r.battery > r.battery_thresh]
-        n_robots = len(idle_robots)
-        orders = [o for o in warehouse.orders if o.completion_time is None] #incomplete orders have no completion 
-        n_orders = len(orders)
-
-        if not idle_robots or not orders: #no avail robots or no pending orders
-            return {}
-
-        cost_matrix = np.zeros((n_robots, n_orders))
-
-        for i, robot in enumerate(idle_robots):
-            for j, order in enumerate(orders):
-                curr_cost = PathPlanner.manhattan(robot.position, order.item_location)
-
-                # priority: int = 1  # 1=normal, 2=high, 3=urgent
-                # My logic here is that urgent orders can get big negative distance to prioritize them 
-                # Might have to tweak this if I have time 
-
-                order_priority = (order.priority - 1) * 50 
-                cost_matrix[i, j] = curr_cost - order_priority
-
-        row_indexes, col_indexes = linear_sum_assignment(cost_matrix)
-        #scikit returns indices of optimal assignment not values 
-        #https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html 
-
-        robot_to_order = {}
-
-        for robot_idx, order_idx in zip(row_indexes, col_indexes):
-            robot = idle_robots[robot_idx].id
-            order = orders[order_idx].id
-            robot_to_order[robot] = order #assign the dict robot -> order 
-
-        return robot_to_order
+        pass
 
 class OrderPredictor:
     """ML model to predict order patterns"""
@@ -428,8 +417,7 @@ class WarehouseSimulator:
         # # Generate orders
         # if np.random.random() < 0.1:  # 10% chance per step
         #     self._generate_random_order()
-        
-        #Battery code here 
+ 
         robots_need_charge = []
         charging_stations = self.charging_stations
 
@@ -440,30 +428,29 @@ class WarehouseSimulator:
                     robot.state = "idle" #done charging 
                 continue 
                 
-            if robot.state == "idle" and robot.battery <= robot.battery_thresh:
+            if robot.state == "idle" and robot.battery <= robot.battery_thresh: #not working but need a charge 
                 robots_need_charge.append(robot)    
                 if charging_stations:
-                    # Find nearest charger
+                    #Find nearest charger to robot 
                     closest_station = min(charging_stations, key=lambda pos: self.path_planner.manhattan(robot.position, pos))
                     robot.target = closest_station
                     robot.state = "moving"
 
+        #If any robots need to charge plan them to a charger
         if robots_need_charge:
             for robot in robots_need_charge:
                  path = self.path_planner.a_star(self.warehouse, robot.position, robot.target)
                  if path:
                      robot.path = path 
 
-
+        #assign orders to robots based on first match 
         assignments = self.task_assigner.greedy_assignment(self.warehouse) # assign based on first match 
-        # assignments = self.task_assigner.optimal_assignment(self.warehouse) # optimal assignment
-        
+
         for robot in self.warehouse.robots:
-            if robot.state == "idle" and robot.id in assignments:
+            if robot.state == "idle" and robot.id in assignments: #if robot is idle and has an order assigned to it
                 order_id = assignments[robot.id] 
                 order = next(o for o in self.warehouse.orders if o.id == order_id)
-
-
+                #Move robot to pickup the order
                 robot.target = order.item_location
                 robot.path = PathPlanner.a_star(self.warehouse, robot.position, robot.target)
                 robot.order_id = order.id #so we know when dropped off etc 
@@ -481,7 +468,7 @@ class WarehouseSimulator:
         """Generate a random order"""
         shelves = np.argwhere(self.warehouse.grid == CellType.SHELF.value)
         if len(shelves) > 0:
-            # Use weighted sampling based on hotspot probabilities
+            #weighted sampling based on hotspot probabilities (so certain shelves are priorities)
             shelf_idx = np.random.choice(len(shelves), p=self.shelf_probabilities)
             shelf = shelves[shelf_idx]
             order = Order(
@@ -498,7 +485,7 @@ class WarehouseSimulator:
             robot.battery = max(0.0, robot.battery - DRAIN_RATE * dt)
 
         if robot.battery <= 0.0:
-            robot.state = "flat"
+            robot.state = "flat" #Flat robots cant be used to plan
             robot.path = []
             robot.target = None
             return
@@ -520,14 +507,14 @@ class WarehouseSimulator:
                 robot.wait_steps += 1
                 return 
 
-            # advance
+            # advance to next pos
             prev_pos = robot.position
             robot_positions.remove(robot.position) 
             robot.position = next_pos
             robot_positions.add(robot.position) #update the robot cells list 
             robot.path.pop(0)
 
-            # classify step as wait or move 
+            # classify step as wait or move for metrics
             if robot.position.x == prev_pos.x and robot.position.y == prev_pos.y:
                 robot.wait_steps += 1
             else:
@@ -565,7 +552,7 @@ class WarehouseSimulator:
                 
                 if order_idx != -1:
                     order = self.warehouse.orders.pop(order_idx)
-                    order.completion_time = self.warehouse.time
+                    order.completion_time = self.warehouse.time #order completed successsfully move on 
                     self.warehouse.completed_orders.append(order)
 
             #Order is completed, reset robot state
@@ -597,6 +584,8 @@ class WarehouseSimulator:
         # aggregate wait/move across robots
         total_wait = sum(r.wait_steps for r in self.warehouse.robots)
         total_move = sum(r.move_steps for r in self.warehouse.robots)
+
+        #Coord overhead is the ratio of wait steps to total steps (so how much time is spent waiting for other robots)
         coord_overhead = (total_wait / (total_wait + total_move)) if (total_wait + total_move) > 0 else 0.0
 
         # battery metrics
