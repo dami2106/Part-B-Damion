@@ -6,15 +6,17 @@ This is a skeleton to get you started quickly.
 Feel free to modify, extend, or completely rewrite!
 """
 
+import pandas as pd
 import numpy as np
 from dataclasses import dataclass
 from typing import List, Tuple, Set, Dict, Optional
 import heapq
 from enum import Enum
-from synthetic_data import SyntheticDataGenerator   
+from src.synthetic_data import SyntheticDataGenerator   
 
 from scipy.optimize import linear_sum_assignment
-import config
+from sklearn.ensemble import RandomForestRegressor
+import src.config as config
 
 CHARGE_RATE = config.CHARGE_RATE
 DRAIN_RATE = config.DRAIN_RATE
@@ -211,7 +213,7 @@ class PathPlanner:
 
                 new_cost = cost_so_far[(curr_node, curr_time)] + 1
 
-                # Check if this path to next_node at next_time is better
+                # Check if this path to next node at next time is better
                 
                 if (next_node, next_time) not in cost_so_far or new_cost < cost_so_far[(next_node, next_time)]:
                     cost_so_far[(next_node, next_time)] = new_cost
@@ -374,29 +376,109 @@ class TaskAssigner:
 class OrderPredictor:
     """ML model to predict order patterns"""
     
-    def __init__(self):
-        self.model = None
-        
-    def train(self, historical_orders: np.ndarray):
-        """Train model to predict order volume and patterns"""
-        # TODO: Implement time series forecasting
-        # - Seasonality (time of day, day of week)
-        # - Trends
-        # - Anomaly detection for flash sales
-        pass
+    def __init__(self, history_num_samples = 24 * 7 ):
+        self.time_model = RandomForestRegressor(random_state=42)
+        self.trained_time_model = False
+        # self.last_update_time = 0
+
+        self.shelf_visit_freq = {} #want ti store pos -> visit count (maybe weighted) 
+        self.decay_amnt = 0.95 # equiv to 5% decay per call (60 step)
+
+        self.history = []
+        self.history_num_samples = history_num_samples
     
-    def predict_next_hour(self, current_time: float) -> np.ndarray:
+    def update_shelf_visit_freq(self, pos):
+        dict_key = (pos.x, pos.y)
+        self.shelf_visit_freq[dict_key] = float(self.shelf_visit_freq.get(dict_key, 0) + 1)
+
+    def apply_decay_to_freq(self):
+        for shelf_pos in list(self.shelf_visit_freq.keys()):
+            self.shelf_visit_freq[shelf_pos] *= self.decay_amnt
+            if self.shelf_visit_freq[shelf_pos] < 0.01:
+                del self.shelf_visit_freq[shelf_pos] #No point decaying one so small justremove 
+
+    def update_hourly(self, current_time, order_count): #can call every hour to update
+        # Convert minutes to hours 1 dt = 1 minute
+        current_time_hours = current_time / 60.0
+        hour_index = int(current_time_hours)
+        
+        curr_hour_of_week = current_time_hours % 168 
+        curr_hour_of_day = current_time_hours % 24
+        curr_day_week = int(current_time_hours // 24) % 7 
+
+        # print("Debug: ", current_time, current_time_hours, curr_hour_of_week, curr_hour_of_day, curr_day_week)
+        #Might have to add cycles here TODO add if perf bad 
+        #https://towardsdatascience.com/how-to-handle-cyclical-data-in-machine-learning-3e0336f7f97c/
+        
+        self.history.append({
+            'time' : current_time, 
+            'hour_of_day' : curr_hour_of_day,
+            'day_of_week' : curr_day_week,
+            'order_count' : order_count
+        })
+
+        #if training takes too long add 
+        # if len(self.history) > self.history_num_samples:
+        #     self.history.pop(0)  #keep history size manageable
+
+    def prep_data (self, df):
+        df = df.copy()
+        df['prev_hour_count'] = df['order_count'].shift(1) #move one down so we have prev hour count 
+        df = df.dropna() #just incase we shifted and got blank 
+
+        all_feats = ['hour_of_day', 'day_of_week', 'prev_hour_count']
+        X = df[all_feats].values
+        y = df['order_count'].values
+        return X, y
+
+
+    def train(self):
+        if len(self.history) < 24: #start training after 1 day of data
+            return #nothing to update
+        
+        df = pd.DataFrame(self.history)
+        X, y = self.prep_data(df)
+
+        if len(X) > 0:
+            self.time_model.fit(X, y)
+            self.trained_time_model = True
+            # print("OrderPredictor: Updated time model with", len(X), "samples.")
+            # print("Feature importances:", self.time_model.feature_importances_)
+            # print("model error", np.std(y - self.time_model.predict(X)))
+    
+
+        #TODO add data split eval etc. 
+        #TODO Spatial model stuffs:
+
+
+    def predict_next_hour(self, current_time: float, curr_hour_count):
         """Predict order volume for next hour"""
-        # TODO: Return predicted order counts
-        # Placeholder: assume 10 orders per hour with variation
-        return np.random.poisson(10, size=1)
+        if not self.trained_time_model:
+            return 10  # No model trained yet
+        
+        next_hour_time = current_time + 60  # next hour in minutes
+        next_hour_of_day = (next_hour_time / 60) % 24 
+        next_day_week = int(next_hour_time // 1440) % 7  #1440 minutes in day
+
+        to_predict = np.array([[next_hour_of_day, next_day_week, curr_hour_count]])
+        predicted_count = self.time_model.predict(to_predict)[0]
+
+        # print("Given current time:", current_time, "and curr hour count:", curr_hour_count, 
+        #       "predicted next hour count:", predicted_count)
+
+
+        return max(0, int(predicted_count)) #model sometimes gave negative values when not trained well
+
     
     def predict_hotspots(self, current_time: float) -> List[Position]:
         """Predict which warehouse areas will be busy"""
-        # TODO: Predict where robots should pre-position
-        # Based on historical patterns
-        return []
+        if not self.shelf_visit_freq:
+            return [] #no data yet
+        
+        shelves_sorted = sorted(self.shelf_visit_freq.keys(), key=lambda x: self.shelf_visit_freq[x], reverse=True)
+        top_shelves = shelves_sorted[:5] #top 5 most visited shelves
 
+        return [Position(x, y) for (x, y) in top_shelves]
 
 class WarehouseSimulator:
     """Main simulation controller"""
@@ -405,16 +487,23 @@ class WarehouseSimulator:
         self.warehouse = warehouse
         self.path_planner = PathPlanner()
         self.task_assigner = TaskAssigner()
-        self.order_predictor = OrderPredictor()
+        # self.order_predictor = OrderPredictor()
         self.dock_locations = self.find_cell_type(CellType.LOADING_DOCK)
         self.charging_stations = self.find_cell_type(CellType.CHARGING_STATION)
         self.shelf_locations = self.find_cell_type(CellType.SHELF)
     
         self.order_schedule = self._generate_daily_schedule()
-        self.next_order_index = 0
-        
-        
         self._initialize_hotspots()
+
+        self.next_order_index = 0
+
+        self.order_pred = OrderPredictor() 
+        self.current_orders_for_hour = 0
+        self.last_time_checked = 0
+        self.predicted_next_hour_orders = 0
+        
+        
+        
 
     #Daily schedule generated using the given synthetic data generator
     def _generate_daily_schedule(self):
@@ -423,7 +512,7 @@ class WarehouseSimulator:
 
         gen = SyntheticDataGenerator()
         
-        #One day for now with peaks at 9, and 5 
+        #One day for now with peaks at 9 and 5 
         df = gen.generate_poisson_events(
             n_days=config.N_DAYS, 
             base_rate=config.BASE_RATE,  #base orders per hour         
@@ -435,7 +524,8 @@ class WarehouseSimulator:
         arrival_times = []
     
         STEPS_PER_HOUR = config.STEPS_PER_HOUR # granularity of simulation steps per hour (how many env steps per hour in the dataset)
-        
+        #reminder : 1 dt = 1 minute in sim so 60 steps per hour
+
         for hour, row in df.iterrows():
             count = int(row['event_count']) # order count for this hour
             if count > 0:
@@ -474,6 +564,61 @@ class WarehouseSimulator:
         return positions
 
 
+    def ml_robot_movement(self):
+        high_load_thresh = 15  #orders per hour if have time make this dynamic based on past data
+        idle_robots = [r for r in self.warehouse.robots if r.state == "idle"]
+
+        if self.predicted_next_hour_orders >= high_load_thresh:
+            # print("Detected high load")
+
+            hotspots = self.order_pred.predict_hotspots(self.warehouse.time)
+            if hotspots:
+                for i, robot in enumerate(idle_robots):
+                    robot.battery_thresh = 30.0 #reset since we will be moving robots
+                    if robot.battery > robot.battery_thresh + 10: #have enough battery to move
+                        curr_hotspot = hotspots[i % len(hotspots)]
+
+                        nearby_cell_hotspot = []
+                        for dx in range(-3, 4): #scan around the hotspot to find an empty cell for us 
+                            for dy in range(-3, 4):
+                                pos_to_go = Position(curr_hotspot.x + dx, curr_hotspot.y + dy)
+                                if self.warehouse.is_valid_position(pos_to_go):
+                                    nearby_cell_hotspot.append(pos_to_go)
+
+                        if nearby_cell_hotspot:
+                            #find the closest empty cell to the hotspot
+                            closest_cell = min(nearby_cell_hotspot, key=lambda pos: self.path_planner.manhattan(curr_hotspot, pos))
+                            robot.target = closest_cell
+                            robot.state = "moving"
+
+
+            else: #fall back to old middle warehouse strategy
+                existing_path_reservations = set()
+
+
+                warehouse_middle = self.warehouse.width // 2, self.warehouse.height // 2
+
+                for robot in idle_robots:
+                    robot.battery_thresh = 30.0  #reset to normal threshold
+                    if robot.battery > robot.battery_thresh + 10: #have enough battery to move
+                        x_area_possible = np.random.randint(-5, 5)
+                        y_area_possible = np.random.randint(-5, 5)
+
+                        robot_target = Position(
+                            min(self.warehouse.width -1, max(0, warehouse_middle[0] + x_area_possible)),
+                            min(self.warehouse.height -1, max(0, warehouse_middle[1] + y_area_possible))
+                        )
+
+                        if self.warehouse.is_valid_position(robot_target):
+                            robot.target = robot_target
+                            robot.state = "moving"
+
+        else:
+            #not many orders can charge more 
+            for robot in idle_robots:
+                if robot.battery < 60.0:
+                    robot.battery_thresh = 60.0
+
     def step(self, dt: float = 1.0):
         self.warehouse.time += dt
         
@@ -482,6 +627,27 @@ class WarehouseSimulator:
             
             self._generate_random_order()
             self.next_order_index += 1
+            self.current_orders_for_hour += 1
+
+
+        #ML Data update
+        if self.warehouse.time - self.last_time_checked >= 60: #atleast every hour
+            self.order_pred.update_hourly(self.warehouse.time, self.current_orders_for_hour)
+
+            self.order_pred.train()
+
+            self.predicted_next_hour_orders = self.order_pred.predict_next_hour(self.warehouse.time, self.current_orders_for_hour)
+            
+            self.order_pred.apply_decay_to_freq() #decay our freqyency track every hour
+
+            # print("Time:", self.warehouse.time, "Ended hour with ", self.current_orders_for_hour, 
+            #       "orders. Predicted next hour orders:", self.predicted_next_hour_orders)
+            
+            #Update robots movement (no planning done here just target assign)
+            self.ml_robot_movement()
+
+            self.last_time_checked = self.warehouse.time
+            self.current_orders_for_hour = 0 #reset for next hour   
 
         # # Generate orders
         # if np.random.random() < 0.1:  # 10% chance per step
@@ -586,6 +752,8 @@ class WarehouseSimulator:
                 priority=np.random.choice([1, 2, 3], p=[0.7, 0.2, 0.1])
             )
             self.warehouse.add_order(order)
+
+            self.order_pred.update_shelf_visit_freq(order.item_location) #update our freqyency track
 
     def _move_robot(self, robot: Robot, robot_positions: Set[Position], dt: float):
             """Move robot one step along its path"""

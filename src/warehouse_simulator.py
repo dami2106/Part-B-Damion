@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from typing import List, Tuple, Set, Dict, Optional
 import heapq
 from enum import Enum
-from synthetic_data import SyntheticDataGenerator   
+from src.synthetic_data import SyntheticDataGenerator   
 
 from scipy.optimize import linear_sum_assignment
-import config
+import src.config as config
 
 CHARGE_RATE = config.CHARGE_RATE
 DRAIN_RATE = config.DRAIN_RATE

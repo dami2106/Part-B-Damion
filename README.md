@@ -11,28 +11,20 @@ If neither Mamba nor Conda is available, a `requirements.txt` is also provided w
 pip install -r requirements.txt
 ```
 
-## Project Files
- - `synthetic_data.py ` : the provided data generation file
- - `benchmark.py ` : a file used to average all experiments + plot results
- - `config.py ` : used to store a config used by all benchmarks
- - `visualise_grid.py ` : used to visualise a static warehouse image of our layout
- - `warehouse_simulator.py ` : the baseline (Greedy match + A*)
- - `warehouse_simulator_coop_astar.py ` : the improved baseline (Hungarian matching + cooperative planning)
- - `warehouse_simulator_ML.py ` : the machine learning improvement using temporal and spatial prediction. 
 
 ## How to Run
 ### Benchmark all implementations
-To run all benchmarks for the daily, weekly and monthly setting, you can make use of the `benchmark.py` file which will run all of the implemented benchmarks, average them over 10 seeds, and plot all the corresponding results with error bars shaded (figs are saved in `/figs`). 
+To run all benchmarks for the daily, weekly and monthly setting, you can make use of the `main.py` file which will run all of the implemented benchmarks, average them over 5 seeds, and plot all the corresponding results with error bars shaded (figs are saved in `/figs`). 
 ```bash
-python benchmark.py
+python main.py
 ```
 
 ### Run individual implementations
 Each implementation can be run on its own, using the commands:
 ```bash
-python warehouse_simulator.py #runs the basic benchmark 
-python warehouse_simulator_coop_astar.py #runs the improved benchmark 
-python warehouse_simulator_ML.py #runs the ML benchmark 
+python src/warehouse_simulator.py #runs the basic benchmark 
+python src/warehouse_simulator_coop_astar.py #runs the improved benchmark 
+python src.warehouse_simulator_ML.py #runs the ML benchmark 
 ```
 ### Customising runs
 For both of the above configurations, the problem setting parameters can be modified in the `config.py` file, here you can specify things like warehouse size, num robots, etc. All benchmark files will use this config. 

@@ -1,7 +1,3 @@
 /__pycache__
 /figs
-/figs_before_shelf_sampling
-/figs_before_ML
-/figs_bkp
-/figs_full_implementation
-/figs_new_stuff
+/src/__pycache__

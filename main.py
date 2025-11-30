@@ -3,16 +3,15 @@ import matplotlib.pyplot as plt
 from typing import Dict, List
 import os
 from scipy.signal import find_peaks
-from warehouse_simulator import Warehouse, WarehouseSimulator, Position as PositionBaseline
-from warehouse_simulator_coop_astar import Warehouse as WarehouseCoop, WarehouseSimulator as WarehouseSimulatorCoop, Position as PositionCoop
-from warehouse_simulator_ML import Warehouse as WarehouseML, WarehouseSimulator as WarehouseSimulatorML, Position as PositionML
-import warehouse_simulator as ws_baseline
-import warehouse_simulator_coop_astar as ws_coop
-import warehouse_simulator_ML as ws_ml
-import config
+from src.warehouse_simulator import Warehouse, WarehouseSimulator, Position as PositionBaseline
+from src.warehouse_simulator_coop_astar import Warehouse as WarehouseCoop, WarehouseSimulator as WarehouseSimulatorCoop, Position as PositionCoop
+from src.warehouse_simulator_ML import Warehouse as WarehouseML, WarehouseSimulator as WarehouseSimulatorML, Position as PositionML
+import src.warehouse_simulator as ws_baseline
+import src.warehouse_simulator_coop_astar as ws_coop
+import src.warehouse_simulator_ML as ws_ml
+import src.config as config
 
 
-# ...existing code...
 # Benchmark configuration
 NUM_ROBOTS = config.NUM_ROBOTS
 WAREHOUSE_W = config.WAREHOUSE_WIDTH
