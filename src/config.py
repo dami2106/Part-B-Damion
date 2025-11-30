@@ -3,8 +3,8 @@ Configuration file for warehouse simulator
 """
 
 # Battery settings
-CHARGE_RATE = 5.0
-DRAIN_RATE = 0.8
+CHARGE_RATE = 20.0
+DRAIN_RATE = 0.2
 
 # Simulation settings
 STEPS_PER_HOUR = 60  # Simulation steps per hour (granularity) we modeled it as minutes so 60 per hour
