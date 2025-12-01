@@ -18,7 +18,7 @@ To run all benchmarks for the daily, weekly and monthly setting, you can make us
 python main.py
 ```
 
-### Run Individual Implementations
+### Run Individual Implementations (This is where our contributions, algorithms and improvements are)
 Each implementation can be run on its own, using the commands:
 ```bash
 python -m src.warehouse_simulator #runs the basic benchmark 
@@ -33,6 +33,9 @@ python visualise_warehouse.py
 
 ### Customising runs
 For both of the above configurations, the problem setting parameters can be modified in the `src/config.py` file, here you can specify things like warehouse size, num robots, etc. All benchmark files will use this config. 
+
+### Checking ML model performance 
+If you would like to run the data exploration and analysis, with evaluation on our chosen models please see the notebook `inspect_data.ipynb`. This cant be run from terminal or bash and will need to be run with a Jupyter environment setup. 
 
 ## Environment and Data Setup Used
  - I use the given starter code to implement the environment but make several changes. 
@@ -65,8 +68,7 @@ For both of the above configurations, the problem setting parameters can be modi
 
 
 ### Improvement 2 (Random Forest, Exponential Smoothing) : 
- - Our sustainable appraoch designed to minimise energy cost per order, improving total throughput. 
- - Here, the path finding and task assignment is mainly the same as in `Improvement (Cooperative A* and Hungarian Matching)` from above. However, I modify it to accomodate new techniques:
+ - My more sustainable appraoch designed to minimise energy cost per order so robots dont go flat, improving total throughput. Here, the path finding and task assignment is mainly the same idea as we discuss in imporevement 1 from above. However, I modify it to accomodate new ML techniques:
  - **Firstly, for the Temporal Model (Demand Volume):**
    -  Here I use a Random Forest Regressor from SKLearn. I train this on live data as I recieve it in the simulation. 
    - The features I use for prediction are : `Hour of the Day`, `Day of the Week`, `Previous Hour's Order Volume` (lag feature). I also added on cyclical features by taking the Sin and Cos of hour of day.  
@@ -82,6 +84,14 @@ For both of the above configurations, the problem setting parameters can be modi
    - If the temporal model predicts a load below the threshold then I can perform other logic:
      1. In this case, I set our robots battery threshold to 60% which makes them all recharge to be ready for the next high load period. 
      2. I still make sure orders are completed using the original logic from the improved appraoach. 
+
+ - **How did I decide on a Random Forest Regressor:**
+   - I would have liked to implement an LSTM as it is the time series model that I have the most experience with from my masters. However, I know that generally LSTMs require quite a bit of data and are less explainable than Random Forests. 
+   - The random forest was the simplest model I know of that is a quick implementation. Due to the time constraints, this was the fasest approach without requiring too much research and it worked quite well (as evident in the notebook where we look at predictions vs actual). 
+
+ - **How did I decide on Hotspot Prediction and Exponential Smoothing**
+   - Since we are in a discerete small environment, it doesnt make sense to train and use a clustering approach as we can easily represent 20x20 bins. 
+   - So we use a heatmap approach instead of a machine learning approach here as it is simpler to epxlain and understand. As for the exponential smoothing, my initial idea was to have the shelves change which are the hotspots over various days of the week. I did not have time to implement the changing shelf logic, but did still include the exponential decay which allows us to forget old data that may no longer be relevant. 
 
 ## Summary of Results
 Resutls shown in the table below reflect the accumulated metrics at the end of 1 week of running the simulation. The best seed (seed 3) is chosen for the below results. Please refer to the slides or the figures in the `/fig` folder for a full averaged comparison between implementations (averaged over 5 seeds) with error regions included.
@@ -105,7 +115,8 @@ Resutls shown in the table below reflect the accumulated metrics at the end of 1
 
 In general, we see the improved ML model completed about 15 times more orders than the baseline (far more than a 30% improvement). The baseline suffered major gridlock, where much of the time was spend waiting for a clear path. This is solved and overcome by our cooperative space time A* implementation. We also see the battery management of our improved approach is much better than the baseline, with none of our robots ever going flat all while maintining a very high average charge. 
 
-
+![Graph showing order throughput](figs/day_total_completed.png "Total Completed Orders over 1 day")
+![Graph showing average battery](figs/day_avg_battery.png "Average battery for all robots over a day")
 
 ## Future Work and Ideas
 Given the time constraint, there were several avenues I did not explore that I would have liked to, such as:
