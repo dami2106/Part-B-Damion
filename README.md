@@ -124,4 +124,4 @@ Given the time constraint, there were several avenues I did not explore that I w
  - https://mlpills.substack.com/p/issue-89-encoding-cyclical-features 
  - https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html 
  - https://towardsdatascience.com/how-to-handle-cyclical-data-in-machine-learning-3e0336f7f97c/
- - Google Gemini and Nano Banana 
+ - Google Gemini (visualisation and averaging code) and Nano Banana (images in slides)
