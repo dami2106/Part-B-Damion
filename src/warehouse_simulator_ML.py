@@ -350,8 +350,7 @@ class TaskAssigner:
 
         row_indexes, col_indexes = linear_sum_assignment(cost_matrix)
         #scikit returns indices of optimal assignment not values 
-        #https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html 
-
+        
         robot_to_order = {}
 
         for robot_idx, order_idx in zip(row_indexes, col_indexes):
@@ -396,7 +395,6 @@ class OrderPredictor:
 
         # print("Debug: ", current_time, current_time_hours, curr_hour_of_week, curr_hour_of_day, curr_day_week)
         #Might have to add cycles here TODO add if perf bad 
-        #https://towardsdatascience.com/how-to-handle-cyclical-data-in-machine-learning-3e0336f7f97c/
         
         self.history.append({
             'time' : current_time, 
@@ -415,7 +413,7 @@ class OrderPredictor:
         df = df.dropna() #just incase we shifted and got blank 
 
         #Add cyclical features 
-        #Apparently useful for recurring patterns see https://mlpills.substack.com/p/issue-89-encoding-cyclical-features for ref
+        #Apparently useful for recurring patterns 
         df['hour_sin'] = np.sin(2 * np.pi * df['hour_of_day'] / 24.0)
         df['hour_cos'] = np.cos(2 * np.pi * df['hour_of_day'] / 24.0)
 
