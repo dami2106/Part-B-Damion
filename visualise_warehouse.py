@@ -28,12 +28,12 @@ PEAK_HOURS = config.PEAK_HOURS  # Peak hours from config
 
 # Visualization warmup: Number of steps to run simulation before starting to capture frames
 # Set to 0 to visualize from the start, or specify steps (e.g., 9 * STEPS_DAY for day 10)
-WARMUP_STEPS = 9 * STEPS_DAY  # Default: Second week Wednesday (Day 10)
+WARMUP_STEPS = 0 * STEPS_DAY  # Default: Second week Wednesday (Day 10)
 
 # Real-time display settings
 SHOW_REALTIME = True  # Set to True to display animation in real-time as it's generated
 SAVE_TO_GIF = True    # Set to True to save animation to GIF file
-REALTIME_FPS = 25     # FPS for real-time display (lower = slower, easier to see)
+REALTIME_FPS =60     # FPS for real-time display (lower = slower, easier to see)
 
 # FPS settings
 FPS_DAY = 30  # FPS for day animation
@@ -484,7 +484,7 @@ def main():
     print("=" * 60)
     print()
     
-    run_baseline_animation(STEPS_DAY, SEED, start_step=WARMUP_STEPS)
+    # run_baseline_animation(STEPS_DAY, SEED, start_step=WARMUP_STEPS)
     print()
     run_ml_animation(STEPS_DAY, SEED, start_step=WARMUP_STEPS)
     print()
