@@ -20,7 +20,7 @@ import src.config as config
 NUM_ROBOTS = config.NUM_ROBOTS
 WAREHOUSE_W = config.WAREHOUSE_WIDTH
 WAREHOUSE_H = config.WAREHOUSE_HEIGHT
-SEED = 2
+SEED = 3
 STEPS_DAY = 24 * 60  # 24 hours * 60 steps/hour
 STEPS_WEEK = 7 * 24 * 60  # 7 days * 24 hours/day * 60 steps/hour
 MOTION_BLUR_FRAMES = 0  # Number of intermediate frames for motion blur (disabled)
@@ -31,9 +31,9 @@ PEAK_HOURS = config.PEAK_HOURS  # Peak hours from config
 WARMUP_STEPS = 0 * STEPS_DAY  # Default: Second week Wednesday (Day 10)
 
 # Real-time display settings
-SHOW_REALTIME = True  # Set to True to display animation in real-time as it's generated
+SHOW_REALTIME = False  # Set to True to display animation in real-time as it's generated
 SAVE_TO_GIF = True    # Set to True to save animation to GIF file
-REALTIME_FPS =60     # FPS for real-time display (lower = slower, easier to see)
+REALTIME_FPS = 60     # FPS for real-time display (lower = slower, easier to see)
 
 # FPS settings
 FPS_DAY = 30  # FPS for day animation
@@ -484,7 +484,7 @@ def main():
     print("=" * 60)
     print()
     
-    # run_baseline_animation(STEPS_DAY, SEED, start_step=WARMUP_STEPS)
+    run_baseline_animation(STEPS_DAY, SEED, start_step=WARMUP_STEPS)
     print()
     run_ml_animation(STEPS_DAY, SEED, start_step=WARMUP_STEPS)
     print()
